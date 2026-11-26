@@ -209,6 +209,7 @@ def main() -> int:
         collect_deals(nse, index, notes)
         if not index.get("backfilled"):
             backfill(nse, index, notes)
+            index["backfilled"] = True  # NSE serves its history endpoint as a blocked page; try once only
         collect_holders(nse, index, notes)
     except Exception as e:
         ok = False
