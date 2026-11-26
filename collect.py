@@ -94,7 +94,7 @@ def collect_deals(nse: NSE, index: dict, notes: list) -> None:
                 days.setdefault(iso(r.get("date") or snap["as_on_date"]), []).append(row)
     for d, rows in days.items():
         path = DATA / "days" / f"{d}.json"
-        if not path.exists():
+        if load(path, {}).get("rows") != rows:
             save(path, {"rows": rows, "fetched": datetime.now(timezone.utc).isoformat(timespec="seconds")})
             notes.append(f"{d}: {len(rows)} deals")
         if d not in index["days"]:
@@ -160,11 +160,13 @@ def _date(x):
 def collect_txns(nse: NSE, symbols: list, index: dict, notes: list) -> None:
     """Insider (SEBI PIT) and substantial-acquisition (SAST Reg 29) disclosures, last 365 days, per company."""
     from datetime import date, timedelta
-    windows, end = [], date.today()
-    for _ in range(4):
-        windows.append((end - timedelta(days=90), end))
-        end -= timedelta(days=91)
     for sym in symbols:
+        old = load(DATA / "txns" / f"{sym}.json", {})
+        full = not old or (old.get("fullAt", "")[:10] != str(date.today()))
+        windows, end = [], date.today()
+        for _ in range(4 if full else 1):
+            windows.append((end - timedelta(days=90), end))
+            end -= timedelta(days=91)
         rows, errs, seen = [], [], set()
         for frm, to in windows:
             for kind, path in (("Insider", "corporates-pit"), ("SAST", "corporate-sast-reg29")):
@@ -194,9 +196,15 @@ def collect_txns(nse: NSE, symbols: list, index: dict, notes: list) -> None:
                                      "before": None, "after": _num(r.get("totAftShare"))})
                 time.sleep(0.8)
         rows = [r for r in rows if r["date"] and r["who"]]
+        if not full:  # keep older rows from the last full fetch
+            k = lambda r: (r["src"], r["date"], r["who"], r["qty"], r["type"])
+            have = {k(r) for r in rows}
+            rows += [r for r in old.get("rows", []) if k(r) not in have]
         rows.sort(key=lambda r: r["date"], reverse=True)
-        if rows or len(errs) < 8:
-            save(DATA / "txns" / f"{sym}.json", {"rows": rows[:400], "fetched": datetime.now(timezone.utc).isoformat(timespec="seconds")})
+        rows = rows[:400]
+        if (rows or len(errs) < 8) and rows != old.get("rows"):
+            save(DATA / "txns" / f"{sym}.json", {"rows": rows, "fetched": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                                                 "fullAt": datetime.now(timezone.utc).isoformat(timespec="seconds") if full else old.get("fullAt")})
             if sym not in index.setdefault("txns", []):
                 index["txns"].append(sym)
         notes.append(f"txns {sym}: {len(rows)}" + (f" ({len(errs)} failed requests: {errs[0]})" if errs else ""))
