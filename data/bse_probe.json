@@ -1,0 +1,36 @@
+{
+ "https://www.bseindia.com/markets/equity/EQReports/bulk_deals.aspx": {
+  "status": 200,
+  "len": 16912,
+  "head": "<!DOCTYPE html><html lang=\"en\" data-critters-container=\"\"><head>\n    <meta charset=\"utf-8\">\n    <title>\n      LIVE Stock/Share Market | Indian Stock/Share Market LIVE | BSE SENSEX | BSE (formerly Bombay Stock\n      Exchange)\n    </title>\n    <meta name=\"description\" content=\"BSE SENSEX - India's Ind",
+  "tables": [],
+  "around": ""
+ },
+ "https://www.bseindia.com/markets/equity/EQReports/block_deals.aspx": {
+  "status": 200,
+  "len": 16912,
+  "head": "<!DOCTYPE html><html lang=\"en\" data-critters-container=\"\"><head>\n    <meta charset=\"utf-8\">\n    <title>\n      LIVE Stock/Share Market | Indian Stock/Share Market LIVE | BSE SENSEX | BSE (formerly Bombay Stock\n      Exchange)\n    </title>\n    <meta name=\"description\" content=\"BSE SENSEX - India's Ind",
+  "tables": [],
+  "around": ""
+ },
+ "https://api.bseindia.com/BseIndiaAPI/api/BulkDealData/w?flag=1": {
+  "status": 403,
+  "len": 417,
+  "head": "<HTML><HEAD>\n<TITLE>Access Denied</TITLE>\n</HEAD><BODY>\n<H1>Access Denied</H1>\n \nYou don't have permission to access \"http&#58;&#47;&#47;api&#46;bseindia&#46;com&#47;BseIndiaAPI&#47;api&#47;BulkDealData&#47;w&#63;\" on this server.<P>\nReference&#32;&#35;18&#46;d85ec817&#46;1795696710&#46;21b1e21f\n<P>"
+ },
+ "https://api.bseindia.com/BseIndiaAPI/api/BlockDealData/w?flag=1": {
+  "status": 403,
+  "len": 418,
+  "head": "<HTML><HEAD>\n<TITLE>Access Denied</TITLE>\n</HEAD><BODY>\n<H1>Access Denied</H1>\n \nYou don't have permission to access \"http&#58;&#47;&#47;api&#46;bseindia&#46;com&#47;BseIndiaAPI&#47;api&#47;BlockDealData&#47;w&#63;\" on this server.<P>\nReference&#32;&#35;18&#46;d85ec817&#46;1795696710&#46;21b1e31c\n<P"
+ },
+ "https://api.bseindia.com/BseIndiaAPI/api/ListofScripData/w?Group=&Scripcode=&industry=&segment=Equity&status=Active": {
+  "status": 403,
+  "len": 420,
+  "head": "<HTML><HEAD>\n<TITLE>Access Denied</TITLE>\n</HEAD><BODY>\n<H1>Access Denied</H1>\n \nYou don't have permission to access \"http&#58;&#47;&#47;api&#46;bseindia&#46;com&#47;BseIndiaAPI&#47;api&#47;ListofScripData&#47;w&#63;\" on this server.<P>\nReference&#32;&#35;18&#46;d85ec817&#46;1795696710&#46;21b1e3fd\n"
+ },
+ "https://api.bseindia.com/BseIndiaAPI/api/ComHeadernew/w?quotetype=EQ&scripcode=513228&seriesid=": {
+  "status": 403,
+  "len": 417,
+  "head": "<HTML><HEAD>\n<TITLE>Access Denied</TITLE>\n</HEAD><BODY>\n<H1>Access Denied</H1>\n \nYou don't have permission to access \"http&#58;&#47;&#47;api&#46;bseindia&#46;com&#47;BseIndiaAPI&#47;api&#47;ComHeadernew&#47;w&#63;\" on this server.<P>\nReference&#32;&#35;18&#46;d85ec817&#46;1795696710&#46;21b1e49b\n<P>"
+ }
+}
