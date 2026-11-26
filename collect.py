@@ -160,50 +160,46 @@ def _date(x):
 def collect_txns(nse: NSE, symbols: list, index: dict, notes: list) -> None:
     """Insider (SEBI PIT) and substantial-acquisition (SAST Reg 29) disclosures, last 365 days, per company."""
     from datetime import date, timedelta
-    to, frm = date.today(), date.today() - timedelta(days=365)
+    windows, end = [], date.today()
+    for _ in range(4):
+        windows.append((end - timedelta(days=90), end))
+        end -= timedelta(days=91)
     for sym in symbols:
-        rows, errs = [], []
-        try:
-            pit = nse.api(f"/api/corporates-pit?index=equities&symbol={sym}&from_date={frm:%d-%m-%Y}&to_date={to:%d-%m-%Y}")
-            items = pit.get("data", []) if isinstance(pit, dict) else pit
-            if items and "pit_keys" not in index:
-                index["pit_keys"] = sorted(items[0].keys())
-            for r in items or []:
-                qty, val = _num(r.get("secAcq")), _num(r.get("secVal"))
-                rows.append({"src": "Insider", "date": _date(r.get("acqfromDt") or r.get("date") or r.get("intimDt")),
-                             "reported": _date(r.get("intimDt") or r.get("date")),
-                             "who": " ".join(str(r.get("acqName") or "").split()), "cat": r.get("personCategory") or "",
-                             "type": r.get("tdpTransactionType") or r.get("acqMode") or "", "mode": r.get("acqMode") or "",
-                             "sec": r.get("secType") or "", "qty": qty, "value": val,
-                             "price": round(val / qty, 2) if qty and val else None,
-                             "before": _num(r.get("befAcqSharesPer")), "after": _num(r.get("afterAcqSharesPer"))})
-        except Exception as e:
-            errs.append(f"pit {e}")
-        time.sleep(1)
-        try:
-            sast = nse.api(f"/api/corporate-sast-reg29?index=equities&symbol={sym}&from_date={frm:%d-%m-%Y}&to_date={to:%d-%m-%Y}")
-            items = sast.get("data", []) if isinstance(sast, dict) else sast
-            if items and "sast_keys" not in index:
-                index["sast_keys"] = sorted(items[0].keys())
-            for r in items or []:
-                rows.append({"src": "SAST", "date": _date(r.get("date") or r.get("timestamp") or r.get("acqSaleDate")),
-                             "reported": _date(r.get("timestamp") or r.get("date")),
-                             "who": " ".join(str(r.get("acquirerName") or r.get("acqName") or "").split()),
-                             "cat": r.get("promoterGroup") or r.get("acquirerType") or "",
-                             "type": r.get("acqSaleType") or r.get("transactionType") or "", "mode": r.get("acqMode") or r.get("modeOfAcq") or "",
-                             "sec": "", "qty": _num(r.get("noOfShareAcq") or r.get("noOfShares")), "value": None, "price": None,
-                             "before": _num(r.get("totAcqShare") and r.get("befAcqSharePer") or r.get("befAcqSharesPer")),
-                             "after": _num(r.get("totAftShare") or r.get("aftAcqSharePer") or r.get("afterAcqSharesPer"))})
-        except Exception as e:
-            errs.append(f"sast {e}")
+        rows, errs, seen = [], [], set()
+        for frm, to in windows:
+            for kind, path in (("Insider", "corporates-pit"), ("SAST", "corporate-sast-reg29")):
+                try:
+                    res = nse.api(f"/api/{path}?index=equities&symbol={sym}&from_date={frm:%d-%m-%Y}&to_date={to:%d-%m-%Y}")
+                except Exception as e:
+                    errs.append(f"{kind} {frm}: {str(e)[:60]}")
+                    continue
+                for r in (res.get("data", []) if isinstance(res, dict) else res) or []:
+                    key = json.dumps(r, sort_keys=True, default=str)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    if kind == "Insider":
+                        qty, val = _num(r.get("secAcq")), _num(r.get("secVal"))
+                        rows.append({"src": "Insider", "date": _date(r.get("acqfromDt") or r.get("date")), "reported": _date(r.get("intimDt") or r.get("date")),
+                                     "who": " ".join(str(r.get("acqName") or "").split()), "cat": r.get("personCategory") or "",
+                                     "type": r.get("tdpTransactionType") or "", "mode": r.get("acqMode") or "", "sec": r.get("secType") or "",
+                                     "qty": qty, "value": val, "price": round(val / qty, 2) if qty and val else None,
+                                     "before": _num(r.get("befAcqSharesPer")), "after": _num(r.get("afterAcqSharesPer"))})
+                    else:
+                        acq, sale = _num(r.get("noOfShareAcq")) or 0, _num(r.get("noOfShareSale")) or 0
+                        rows.append({"src": "SAST", "date": _date(r.get("acquirerDate") or r.get("date") or r.get("timestamp")), "reported": _date(r.get("timestamp")),
+                                     "who": " ".join(str(r.get("acquirerName") or "").split()), "cat": r.get("promoterType") or "",
+                                     "type": r.get("acqSaleType") or ("Sale" if sale > acq else "Acquisition"), "mode": r.get("acquisitionMode") or "",
+                                     "sec": "", "qty": (acq or sale) or None, "value": None, "price": None,
+                                     "before": None, "after": _num(r.get("totAftShare"))})
+                time.sleep(0.8)
         rows = [r for r in rows if r["date"] and r["who"]]
         rows.sort(key=lambda r: r["date"], reverse=True)
-        if rows or not errs:
-            save(DATA / "txns" / f"{sym}.json", {"rows": rows[:300], "fetched": datetime.now(timezone.utc).isoformat(timespec="seconds")})
+        if rows or len(errs) < 8:
+            save(DATA / "txns" / f"{sym}.json", {"rows": rows[:400], "fetched": datetime.now(timezone.utc).isoformat(timespec="seconds")})
             if sym not in index.setdefault("txns", []):
                 index["txns"].append(sym)
-        notes.append(f"txns {sym}: {len(rows)}" + (f" ({'; '.join(errs)[:160]})" if errs else ""))
-        time.sleep(1)
+        notes.append(f"txns {sym}: {len(rows)}" + (f" ({len(errs)} failed requests: {errs[0]})" if errs else ""))
 
 
 def parse_xbrl(xml_text: str) -> list:
