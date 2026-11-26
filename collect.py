@@ -139,6 +139,73 @@ def backfill(nse: NSE, index: dict, notes: list, days_back: int = 365) -> None:
         index["backfilled"] = True
 
 
+def _num(x):
+    try:
+        return float(str(x).replace(",", "").strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def _date(x):
+    """NSE dates come as 25-Nov-2026, 25-NOV-2026 12:00:00 or 2026-11-25."""
+    s = str(x or "").strip()
+    if len(s) >= 10 and s[4] == "-":
+        return s[:10]
+    try:
+        return iso(s.split()[0])
+    except Exception:
+        return None
+
+
+def collect_txns(nse: NSE, symbols: list, index: dict, notes: list) -> None:
+    """Insider (SEBI PIT) and substantial-acquisition (SAST Reg 29) disclosures, last 365 days, per company."""
+    from datetime import date, timedelta
+    to, frm = date.today(), date.today() - timedelta(days=365)
+    for sym in symbols:
+        rows, errs = [], []
+        try:
+            pit = nse.api(f"/api/corporates-pit?index=equities&symbol={sym}&from_date={frm:%d-%m-%Y}&to_date={to:%d-%m-%Y}")
+            items = pit.get("data", []) if isinstance(pit, dict) else pit
+            if items and "pit_keys" not in index:
+                index["pit_keys"] = sorted(items[0].keys())
+            for r in items or []:
+                qty, val = _num(r.get("secAcq")), _num(r.get("secVal"))
+                rows.append({"src": "Insider", "date": _date(r.get("acqfromDt") or r.get("date") or r.get("intimDt")),
+                             "reported": _date(r.get("intimDt") or r.get("date")),
+                             "who": " ".join(str(r.get("acqName") or "").split()), "cat": r.get("personCategory") or "",
+                             "type": r.get("tdpTransactionType") or r.get("acqMode") or "", "mode": r.get("acqMode") or "",
+                             "sec": r.get("secType") or "", "qty": qty, "value": val,
+                             "price": round(val / qty, 2) if qty and val else None,
+                             "before": _num(r.get("befAcqSharesPer")), "after": _num(r.get("afterAcqSharesPer"))})
+        except Exception as e:
+            errs.append(f"pit {e}")
+        time.sleep(1)
+        try:
+            sast = nse.api(f"/api/corporate-sast-reg29?index=equities&symbol={sym}&from_date={frm:%d-%m-%Y}&to_date={to:%d-%m-%Y}")
+            items = sast.get("data", []) if isinstance(sast, dict) else sast
+            if items and "sast_keys" not in index:
+                index["sast_keys"] = sorted(items[0].keys())
+            for r in items or []:
+                rows.append({"src": "SAST", "date": _date(r.get("date") or r.get("timestamp") or r.get("acqSaleDate")),
+                             "reported": _date(r.get("timestamp") or r.get("date")),
+                             "who": " ".join(str(r.get("acquirerName") or r.get("acqName") or "").split()),
+                             "cat": r.get("promoterGroup") or r.get("acquirerType") or "",
+                             "type": r.get("acqSaleType") or r.get("transactionType") or "", "mode": r.get("acqMode") or r.get("modeOfAcq") or "",
+                             "sec": "", "qty": _num(r.get("noOfShareAcq") or r.get("noOfShares")), "value": None, "price": None,
+                             "before": _num(r.get("totAcqShare") and r.get("befAcqSharePer") or r.get("befAcqSharesPer")),
+                             "after": _num(r.get("totAftShare") or r.get("aftAcqSharePer") or r.get("afterAcqSharesPer"))})
+        except Exception as e:
+            errs.append(f"sast {e}")
+        rows = [r for r in rows if r["date"] and r["who"]]
+        rows.sort(key=lambda r: r["date"], reverse=True)
+        if rows or not errs:
+            save(DATA / "txns" / f"{sym}.json", {"rows": rows[:300], "fetched": datetime.now(timezone.utc).isoformat(timespec="seconds")})
+            if sym not in index.setdefault("txns", []):
+                index["txns"].append(sym)
+        notes.append(f"txns {sym}: {len(rows)}" + (f" ({'; '.join(errs)[:160]})" if errs else ""))
+        time.sleep(1)
+
+
 def parse_xbrl(xml_text: str) -> list:
     root = ET.fromstring(xml_text.encode() if isinstance(xml_text, str) else xml_text)
     facts = {}
@@ -211,11 +278,14 @@ def main() -> int:
             backfill(nse, index, notes)
             index["backfilled"] = True  # NSE serves its history endpoint as a blocked page; try once only
         collect_holders(nse, index, notes)
+        syms = [s.strip().upper() for s in load(ROOT / "portfolio.json", {}).get("symbols", []) if s.strip()]
+        collect_txns(nse, syms[:MAX_HOLDER_SYMBOLS], index, notes)
     except Exception as e:
         ok = False
         notes.append(f"failed: {e}")
     index["days"] = sorted(set(index["days"]))
     index["holders"] = sorted(set(index["holders"]))
+    index["txns"] = sorted(set(index.get("txns", [])))
     index.update(lastRun=datetime.now(timezone.utc).isoformat(timespec="seconds"), ok=ok, note="; ".join(notes)[:500])
     save(DATA / "index.json", index)
     print(json.dumps({"ok": ok, "notes": notes}, indent=1))
