@@ -13,6 +13,7 @@ Holder row format: [name, pct, filing group]
 """
 
 import json
+import re
 import sys
 import time
 import xml.etree.ElementTree as ET
@@ -390,7 +391,9 @@ def collect_corporate(nse: NSE, symbols: list, index: dict, notes: list) -> None
             keep = []
             for r in items or []:
                 text = " ".join(str(r.get(k) or "") for k in ("desc", "attchmntText", "smIndustry", "subject"))
-                if any(w in text.lower() for w in ALLOT):
+                low = text.lower()
+                if (re.search(r"\b(allot|allotment|allotted|preferential|qip|qualified institution|warrants?|rights issue|private placement|esop|esos|employee stock)\b", low)
+                        and not re.search(r"postal ballot|newspaper|scrutini", low)):
                     keep.append({"date": _date(r.get("an_dt") or r.get("sort_date") or r.get("dt")), "subject": r.get("desc") or "",
                                  "text": str(r.get("attchmntText") or "")[:600], "file": r.get("attchmntFile") or ""})
             out["allot"] = sorted(keep, key=lambda r: r["date"] or "", reverse=True)[:40]
