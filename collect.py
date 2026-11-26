@@ -99,6 +99,42 @@ def collect_deals(nse: NSE, index: dict, notes: list) -> None:
         notes.append("no deals published (holiday?)")
 
 
+def backfill(nse: NSE, index: dict, notes: list, days_back: int = 365) -> None:
+    """Fill past trading days from NSE's historical bulk/block deal reports, 30 days per request."""
+    from datetime import date, timedelta
+    end = date.today()
+    start = end - timedelta(days=days_back)
+    added = {}
+    while end > start:
+        frm = max(start, end - timedelta(days=29))
+        for kind, path in (("U", "bulk-deals"), ("K", "block-deals")):
+            try:
+                data = nse.api(f"/api/historical/{path}?from={frm:%d-%m-%Y}&to={end:%d-%m-%Y}")
+            except Exception as e:
+                notes.append(f"backfill {path} {frm}: {e}")
+                continue
+            for r in (data.get("data") if isinstance(data, dict) else data) or []:
+                try:
+                    d = iso(r["BD_DT_DATE"])
+                    row = [r["BD_SYMBOL"].strip(), (r.get("BD_SCRIP_NAME") or "").strip(), " ".join(str(r["BD_CLIENT_NAME"]).split()),
+                           "B" if str(r["BD_BUY_SELL"]).upper().startswith("B") else "S", int(float(r["BD_QTY_TRD"])), float(r["BD_TP_WATP"]), kind]
+                except (KeyError, ValueError, TypeError):
+                    continue
+                if row[0] and row[2] and row[4] > 0 and row[5] > 0:
+                    added.setdefault(d, []).append(row)
+            time.sleep(2)
+        end = frm - timedelta(days=1)
+    for d, rows in added.items():
+        path = DATA / "days" / f"{d}.json"
+        if not path.exists():
+            save(path, {"rows": rows, "fetched": datetime.now(timezone.utc).isoformat(timespec="seconds"), "source": "historical"})
+        if d not in index["days"]:
+            index["days"].append(d)
+    notes.append(f"backfill: {len(added)} days, {sum(map(len, added.values()))} deals")
+    if added:
+        index["backfilled"] = True
+
+
 def parse_xbrl(xml_text: str) -> list:
     root = ET.fromstring(xml_text.encode() if isinstance(xml_text, str) else xml_text)
     facts = {}
@@ -167,6 +203,8 @@ def main() -> int:
     try:
         nse = NSE()
         collect_deals(nse, index, notes)
+        if not index.get("backfilled"):
+            backfill(nse, index, notes)
         collect_holders(nse, index, notes)
     except Exception as e:
         ok = False
