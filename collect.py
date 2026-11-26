@@ -315,18 +315,49 @@ def collect_companies(nse: NSE, index: dict, notes: list) -> None:
 
 
 def collect_prices(nse: NSE, symbols: list, notes: list) -> None:
-    prices = load(DATA / "prices.json", {})
+    """Live quote when NSE allows it; otherwise the official closing price from NSE's daily bhavcopy."""
+    from datetime import date, timedelta
+    prices, missing = load(DATA / "prices.json", {}), []
     for sym in symbols:
         try:
-            q = nse.api(f"/api/quote-equity?symbol={sym}")
+            nse.s.get(f"{nse.base}/get-quotes/equity?symbol={sym}", timeout=30)
+            old = nse.s.headers.get("Referer")
+            nse.s.headers["Referer"] = f"{nse.base}/get-quotes/equity?symbol={sym}"
+            try:
+                q = nse.api(f"/api/quote-equity?symbol={sym}")
+            finally:
+                nse.s.headers["Referer"] = old
             p = q.get("priceInfo", {})
             hl = p.get("weekHighLow", {}) or {}
             prices[sym] = {"price": p.get("lastPrice"), "change": p.get("change"), "pct": p.get("pChange"),
                            "prev": p.get("previousClose"), "high52": hl.get("max"), "low52": hl.get("min"),
-                           "time": q.get("metadata", {}).get("lastUpdateTime") or datetime.now(timezone.utc).isoformat(timespec="seconds")}
-        except Exception as e:
-            notes.append(f"price {sym} failed: {str(e)[:80]}")
+                           "time": q.get("metadata", {}).get("lastUpdateTime") or "", "live": True}
+        except Exception:
+            missing.append(sym)
         time.sleep(0.6)
+    if missing:
+        import csv, io
+        host = nse.base.replace("://www.", "://nsearchives.")
+        for back in range(0, 7):
+            d = date.today() - timedelta(days=back)
+            try:
+                text = nse.text(f"{host}/products/content/sec_bhavdata_full_{d:%d%m%Y}.csv")
+            except Exception:
+                continue
+            rows = {r[0].strip(): r for r in csv.reader(io.StringIO(text)) if len(r) > 8 and r[1].strip() == "EQ"}
+            for sym in missing:
+                r = rows.get(sym)
+                if r:
+                    close, prev = _num(r[8]), _num(r[3])
+                    old = prices.get(sym, {})
+                    prices[sym] = {"price": close, "prev": prev, "change": round(close - prev, 2) if close and prev else None,
+                                   "pct": round((close / prev - 1) * 100, 2) if close and prev else None,
+                                   "high52": old.get("high52"), "low52": old.get("low52"),
+                                   "time": f"close {d:%d %b %Y}", "live": False}
+            notes.append(f"prices: {len(symbols) - len(missing)} live, {len(missing)} from {d:%d %b} close")
+            break
+        else:
+            notes.append(f"prices failed for {', '.join(missing)}")
     save(DATA / "prices.json", prices)
 
 
