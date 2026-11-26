@@ -361,6 +361,49 @@ def collect_prices(nse: NSE, symbols: list, notes: list) -> None:
     save(DATA / "prices.json", prices)
 
 
+ALLOT = ("allot", "preferential", "qip", "qualified institution", "warrant", "rights issue", "private placement", "esop", "employee stock")
+
+
+def collect_corporate(nse: NSE, symbols: list, index: dict, notes: list) -> None:
+    """Promoter pledges and share allotments (preferential issues, QIPs, warrants), per company, once a day."""
+    from datetime import date, timedelta
+    today = str(date.today())
+    for sym in symbols:
+        path = DATA / "corp" / f"{sym}.json"
+        old = load(path, {})
+        if old.get("day") == today:
+            continue
+        out = {"day": today, "pledge": old.get("pledge", []), "allot": old.get("allot", []), "errors": []}
+        try:
+            res = nse.api(f"/api/corporate-pledgedata?index=equities&symbol={sym}")
+            items = res.get("data", []) if isinstance(res, dict) else res
+            if items and "pledge_keys" not in index:
+                index["pledge_keys"] = sorted(items[0].keys())
+            out["pledge"] = [{k: r.get(k) for k in r if k not in ("anex", "attachment", "xbrl")} for r in (items or [])][:12]
+        except Exception as e:
+            out["errors"].append(f"pledge: {str(e)[:80]}")
+        time.sleep(0.8)
+        try:
+            frm, to = date.today() - timedelta(days=730), date.today()
+            res = nse.api(f"/api/corporate-announcements?index=equities&symbol={sym}&from_date={frm:%d-%m-%Y}&to_date={to:%d-%m-%Y}")
+            items = res.get("data", []) if isinstance(res, dict) else res
+            keep = []
+            for r in items or []:
+                text = " ".join(str(r.get(k) or "") for k in ("desc", "attchmntText", "smIndustry", "subject"))
+                if any(w in text.lower() for w in ALLOT):
+                    keep.append({"date": _date(r.get("an_dt") or r.get("sort_date") or r.get("dt")), "subject": r.get("desc") or "",
+                                 "text": str(r.get("attchmntText") or "")[:600], "file": r.get("attchmntFile") or ""})
+            out["allot"] = sorted(keep, key=lambda r: r["date"] or "", reverse=True)[:40]
+        except Exception as e:
+            out["errors"].append(f"announcements: {str(e)[:80]}")
+        time.sleep(0.8)
+        if out["pledge"] or out["allot"] or not out["errors"]:
+            save(path, out)
+            if sym not in index.setdefault("corp", []):
+                index["corp"].append(sym)
+        notes.append(f"corp {sym}: {len(out['pledge'])} pledge rows, {len(out['allot'])} allotments" + (f" ({'; '.join(out['errors'])})" if out["errors"] else ""))
+
+
 def main() -> int:
     index = load(DATA / "index.json", {"days": [], "holders": []})
     notes, ok = [], True
@@ -378,12 +421,14 @@ def main() -> int:
         syms = [s.strip().upper() for s in load(ROOT / "portfolio.json", {}).get("symbols", []) if s.strip()]
         collect_txns(nse, syms[:MAX_HOLDER_SYMBOLS], index, notes)
         collect_prices(nse, syms[:MAX_HOLDER_SYMBOLS], notes)
+        collect_corporate(nse, syms[:MAX_HOLDER_SYMBOLS], index, notes)
     except Exception as e:
         ok = False
         notes.append(f"failed: {e}")
     index["days"] = sorted(set(index["days"]))
     index["holders"] = sorted(set(index["holders"]))
     index["txns"] = sorted(set(index.get("txns", [])))
+    index["corp"] = sorted(set(index.get("corp", [])))
     index.update(lastRun=datetime.now(timezone.utc).isoformat(timespec="seconds"), ok=ok, note="; ".join(notes)[:500])
     save(DATA / "index.json", index)
     print(json.dumps({"ok": ok, "notes": notes}, indent=1))
