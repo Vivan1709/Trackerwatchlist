@@ -12,7 +12,7 @@ Deal row format: [symbol, company, client, "B"|"S", qty, price, "U" bulk | "K" b
 Holder row format: [name, pct, filing group]
 """
 
-import json
+import json, os
 import re
 import sys
 import time
@@ -287,8 +287,13 @@ def parse_xbrl(xml_text) -> dict:
     return {"rows": sorted(rows, key=lambda r: -r[1]), "totals": totals, "shareholders": total_holders}
 
 
+def portfolio_symbols() -> list:
+    only = [s.strip().upper() for s in os.environ.get("ONLY_SYMBOLS", "").split(",") if s.strip()]
+    return only or [s.strip().upper() for s in load(ROOT / "portfolio.json", {}).get("symbols", []) if s.strip()]
+
+
 def collect_holders(nse: NSE, index: dict, notes: list) -> None:
-    symbols = [s.strip().upper() for s in load(ROOT / "portfolio.json", {}).get("symbols", []) if s.strip()]
+    symbols = portfolio_symbols()
     done = 0
     for sym in symbols:
         if done >= MAX_HOLDER_SYMBOLS:
@@ -454,16 +459,16 @@ def main() -> int:
     notes, ok = [], True
     try:
         nse = NSE()
-        collect_deals(nse, index, notes)
-        try:
-            collect_companies(nse, index, notes)
-        except Exception as e:
-            notes.append(f"company list failed: {e}")
-        if not index.get("backfilled"):
-            backfill(nse, index, notes)
-            index["backfilled"] = True  # NSE serves its history endpoint as a blocked page; try once only
+        quick = bool(os.environ.get("ONLY_SYMBOLS", "").strip())   # a company was just added: fetch only that, fast
+        if not quick:
+            collect_deals(nse, index, notes)
+            try:
+                collect_companies(nse, index, notes)
+            except Exception as e:
+                notes.append(f"company list failed: {e}")
+        index["backfilled"] = True
         collect_holders(nse, index, notes)
-        syms = [s.strip().upper() for s in load(ROOT / "portfolio.json", {}).get("symbols", []) if s.strip()]
+        syms = portfolio_symbols()
         collect_deal_history(nse, syms[:MAX_HOLDER_SYMBOLS], index, notes)
         collect_txns(nse, syms[:MAX_HOLDER_SYMBOLS], index, notes)
         collect_prices(nse, syms[:MAX_HOLDER_SYMBOLS], notes)

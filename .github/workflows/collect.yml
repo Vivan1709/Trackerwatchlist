@@ -4,13 +4,18 @@ on:
   schedule:
     - cron: "*/30 3-18 * * 1-5"   # every 30 minutes, 9:00 AM to 12:30 AM IST, Monday to Friday
     - cron: "40 1 * * 2-6"        # 7:10 AM IST next morning, catches anything missed
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      symbols:
+        description: "Only these symbols (comma separated), for a company just added"
+        required: false
+        default: ""
 
 permissions:
   contents: write
 
 concurrency:
-  group: collect
+  group: collect-${{ github.event.inputs.symbols || 'all' }}
   cancel-in-progress: false
 
 jobs:
@@ -25,6 +30,8 @@ jobs:
       - run: pip install requests==2.32.3
       - name: Collect from NSE
         run: python collect.py
+        env:
+          ONLY_SYMBOLS: ${{ github.event.inputs.symbols }}
       - name: Save data
         if: always()
         run: |

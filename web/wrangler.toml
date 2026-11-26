@@ -1,0 +1,10 @@
+name = "big-money-tracker"
+main = "worker.js"
+compatibility_date = "2026-11-01"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+[vars]
+REPO = "Vivan1709/Trackerwatchlist"

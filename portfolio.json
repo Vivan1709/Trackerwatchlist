@@ -1,1 +1,35 @@
-{"symbols":["HDFCBANK","INTERARCH","PACEDIGITK","PENIND","WELCORP"]}
+{
+ "symbols": [
+  "HDFCBANK",
+  "INTERARCH",
+  "PACEDIGITK",
+  "PENIND",
+  "WELCORP"
+ ],
+ "items": [
+  {
+   "s": "HDFCBANK",
+   "q": "HDFC Bank"
+  },
+  {
+   "s": "INTERARCH",
+   "q": "Interarch Building Solutions"
+  },
+  {
+   "s": "PACEDIGITK",
+   "q": "Pace Digitek"
+  },
+  {
+   "s": "PENIND",
+   "q": "Pennar Industries"
+  },
+  {
+   "s": "WELCORP",
+   "q": "Welspun Corp"
+  }
+ ],
+ "follows": [
+  "Bandhan Mutual Fund",
+  "Ashish Kacholia"
+ ]
+}
