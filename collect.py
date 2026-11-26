@@ -210,25 +210,38 @@ def collect_txns(nse: NSE, symbols: list, index: dict, notes: list) -> None:
         notes.append(f"txns {sym}: {len(rows)}" + (f" ({len(errs)} failed requests: {errs[0]})" if errs else ""))
 
 
-def parse_xbrl(xml_text: str) -> list:
+def parse_xbrl(xml_text) -> dict:
+    """Named 1%+ holders, plus the filing's own category totals (every *_ContextI percentage) and shareholder count."""
     root = ET.fromstring(xml_text.encode() if isinstance(xml_text, str) else xml_text)
-    facts = {}
+    facts, totals, counts = {}, {}, {}
     for el in root.iter():
         ref = el.get("contextRef")
-        if not ref:
+        if not ref or el.text is None:
             continue
         name = el.tag.rsplit("}", 1)[-1]
-        f = facts.setdefault(ref[2:] if ref.startswith("D_") else ref, {})
-        if name == "NameOfTheShareholder" and el.text:
-            f["h"] = " ".join(el.text.split())
-        elif name == "ShareholdingAsAPercentageOfTotalNumberOfShares" and "p" not in f and el.text:
+        text = el.text.strip()
+        if name == "ShareholdingAsAPercentageOfTotalNumberOfShares" and ref.endswith("_ContextI"):
             try:
-                f["p"] = float(el.text)
+                totals[ref[:-len("_ContextI")]] = round(float(text) * 100, 4)
+            except ValueError:
+                pass
+        if name in ("NumberOfShareholders", "NumberOfShareHolders") and ref.endswith("_ContextI"):
+            try:
+                counts[ref[:-len("_ContextI")]] = int(float(text))
+            except ValueError:
+                pass
+        f = facts.setdefault(ref[2:] if ref.startswith("D_") else ref, {})
+        if name == "NameOfTheShareholder":
+            f["h"] = " ".join(text.split())
+        elif name == "ShareholdingAsAPercentageOfTotalNumberOfShares" and "p" not in f:
+            try:
+                f["p"] = float(text)
             except ValueError:
                 pass
     rows = [[f["h"], round(f["p"] * 100, 2), key.split("_Context")[0]]
             for key, f in facts.items() if "h" in f and "p" in f and 1 <= f["p"] * 100 <= 100]
-    return sorted(rows, key=lambda r: -r[1])
+    total_holders = max(counts.values()) if counts else None
+    return {"rows": sorted(rows, key=lambda r: -r[1]), "totals": totals, "shareholders": total_holders}
 
 
 def collect_holders(nse: NSE, index: dict, notes: list) -> None:
@@ -246,21 +259,22 @@ def collect_holders(nse: NSE, index: dict, notes: list) -> None:
             if not filings:
                 continue
             latest = iso(filings[0]["date"])
-            if stored["q"] and stored["q"][0].get("period") == latest:
+            if stored["q"] and stored["q"][0].get("period") == latest and "totals" in stored["q"][0]:
                 continue
             have = {q["period"]: q for q in stored["q"]}
             quarters = []
             for f in filings:
                 period = iso(f["date"])
-                if period in have:
+                if period in have and "totals" in have[period]:
                     quarters.append(have[period])
                     continue
-                rows = parse_xbrl(nse.text(f["xbrl"]))
+                parsed = parse_xbrl(nse.text(f["xbrl"]))
                 try:
                     promoter = float(f.get("pr_and_prgrp"))
                 except (TypeError, ValueError):
                     promoter = None
-                quarters.append({"period": period, "filed": f.get("broadcastDate"), "promoter": promoter, "rows": rows})
+                quarters.append({"period": period, "filed": f.get("broadcastDate"), "promoter": promoter, "public": _num(f.get("public_val")),
+                                 "rows": parsed["rows"], "totals": parsed["totals"], "shareholders": parsed["shareholders"]})
                 time.sleep(1)
             save(path, {"q": quarters})
             if sym not in index["holders"]:
