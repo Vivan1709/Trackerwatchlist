@@ -31,5 +31,7 @@ jobs:
           git config user.name "big-money-tracker-bot"
           git config user.email "actions@users.noreply.github.com"
           git add data
-          git diff --cached --quiet || git commit -m "NSE data $(date -u +%F)"
-          git push
+          git diff --cached --quiet && exit 0
+          git commit -m "NSE data $(date -u +%F)"
+          for i in 1 2 3; do git pull --rebase -X theirs origin main && git push && exit 0; sleep 5; done
+          exit 1

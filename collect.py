@@ -255,7 +255,13 @@ def collect_holders(nse: NSE, index: dict, notes: list) -> None:
         stored = load(path, {"q": []})
         try:
             filings = nse.api(f"/api/corporate-share-holdings-master?index=equities&symbol={sym}")
-            filings = [f for f in (filings if isinstance(filings, list) else filings.get("data", [])) if f.get("xbrl")][:2]
+            seen, uniq = set(), []
+            for f in [f for f in (filings if isinstance(filings, list) else filings.get("data", [])) if f.get("xbrl")]:
+                p = iso(f["date"])
+                if p not in seen:          # first listed = latest submission for that quarter (revisions included)
+                    seen.add(p)
+                    uniq.append(f)
+            filings = sorted(uniq, key=lambda f: iso(f["date"]), reverse=True)[:2]
             if not filings:
                 continue
             latest = iso(filings[0]["date"])
@@ -286,12 +292,37 @@ def collect_holders(nse: NSE, index: dict, notes: list) -> None:
         time.sleep(1)
 
 
+def collect_companies(nse: NSE, index: dict, notes: list) -> None:
+    today = datetime.now(timezone.utc).date().isoformat()
+    if index.get("companiesAt") == today:
+        return
+    import csv, io
+    host = nse.base.replace("://www.", "://nsearchives.")
+    rows = list(csv.reader(io.StringIO(nse.text(host + "/content/equities/EQUITY_L.csv"))))
+    out = []
+    for r in rows[1:]:
+        if len(r) >= 2 and r[0].strip():
+            name = r[1].strip()
+            for suffix in (" Limited", " Ltd.", " Ltd"):
+                if name.endswith(suffix):
+                    name = name[: -len(suffix)]
+            out.append([r[0].strip(), name])
+    if len(out) > 1500:
+        save(DATA / "companies.json", out)
+        index["companiesAt"] = today
+        notes.append(f"company list: {len(out)}")
+
+
 def main() -> int:
     index = load(DATA / "index.json", {"days": [], "holders": []})
     notes, ok = [], True
     try:
         nse = NSE()
         collect_deals(nse, index, notes)
+        try:
+            collect_companies(nse, index, notes)
+        except Exception as e:
+            notes.append(f"company list failed: {e}")
         if not index.get("backfilled"):
             backfill(nse, index, notes)
             index["backfilled"] = True  # NSE serves its history endpoint as a blocked page; try once only
