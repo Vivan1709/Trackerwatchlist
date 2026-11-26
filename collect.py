@@ -158,6 +158,47 @@ def _date(x):
         return None
 
 
+def collect_deal_history(nse: NSE, symbols: list, index: dict, notes: list) -> None:
+    """Every bulk and block deal in each portfolio company over the last year (NSE's history endpoint, per symbol), once a day."""
+    from datetime import date, timedelta
+    done = index.setdefault("histAt", {})
+    frm, to = date.today() - timedelta(days=365), date.today()
+    for sym in symbols:
+        if done.get(sym) == str(to):
+            continue
+        add, failed = {}, False
+        for kind, opt in (("U", "bulk_deals"), ("K", "block_deals")):
+            try:
+                res = nse.api(f"/api/historicalOR/bulk-block-short-deals?optionType={opt}&symbol={sym}&from={frm:%d-%m-%Y}&to={to:%d-%m-%Y}")
+            except Exception as e:
+                failed = True
+                notes.append(f"history {sym} {opt} failed: {str(e)[:60]}")
+                continue
+            for r in res.get("data") or []:
+                try:
+                    row = [r["BD_SYMBOL"].strip(), (r.get("BD_SCRIP_NAME") or "").strip(), " ".join(str(r["BD_CLIENT_NAME"]).split()),
+                           "B" if str(r["BD_BUY_SELL"]).upper().startswith("B") else "S", int(float(r["BD_QTY_TRD"])), float(r["BD_TP_WATP"]), kind]
+                    add.setdefault(iso(r["BD_DT_DATE"]), []).append(row)
+                except (KeyError, ValueError, TypeError):
+                    continue
+            time.sleep(1)
+        n = 0
+        for day, rows in add.items():
+            f = DATA / "days" / f"{day}.json"
+            cur = load(f, {"rows": []})
+            have = {json.dumps(x) for x in cur["rows"]}
+            new = [x for x in rows if json.dumps(x) not in have]
+            if new:
+                cur["rows"] += new
+                cur.setdefault("fetched", datetime.now(timezone.utc).isoformat(timespec="seconds"))
+                save(f, cur)
+                index["days"].append(day)
+                n += len(new)
+        if not failed:
+            done[sym] = str(to)
+        notes.append(f"history {sym}: {sum(map(len, add.values()))} deals in a year, {n} new")
+
+
 def collect_txns(nse: NSE, symbols: list, index: dict, notes: list) -> None:
     """Insider (SEBI PIT) and substantial-acquisition (SAST Reg 29) disclosures, last 365 days, per company."""
     from datetime import date, timedelta
@@ -169,10 +210,11 @@ def collect_txns(nse: NSE, symbols: list, index: dict, notes: list) -> None:
             windows.append((end - timedelta(days=90), end))
             end -= timedelta(days=91)
         rows, errs, seen = [], [], set()
-        for frm, to in windows:
+        for frm, to in windows + [(None, None)]:
             for kind, path in (("Insider", "corporates-pit"), ("SAST", "corporate-sast-reg29")):
                 try:
-                    res = nse.api(f"/api/{path}?index=equities&symbol={sym}&from_date={frm:%d-%m-%Y}&to_date={to:%d-%m-%Y}")
+                    q = f"&from_date={frm:%d-%m-%Y}&to_date={to:%d-%m-%Y}" if frm else ""
+                    res = nse.api(f"/api/{path}?index=equities&symbol={sym}{q}")
                 except Exception as e:
                     errs.append(f"{kind} {frm}: {str(e)[:60]}")
                     continue
@@ -422,6 +464,7 @@ def main() -> int:
             index["backfilled"] = True  # NSE serves its history endpoint as a blocked page; try once only
         collect_holders(nse, index, notes)
         syms = [s.strip().upper() for s in load(ROOT / "portfolio.json", {}).get("symbols", []) if s.strip()]
+        collect_deal_history(nse, syms[:MAX_HOLDER_SYMBOLS], index, notes)
         collect_txns(nse, syms[:MAX_HOLDER_SYMBOLS], index, notes)
         collect_prices(nse, syms[:MAX_HOLDER_SYMBOLS], notes)
         collect_corporate(nse, syms[:MAX_HOLDER_SYMBOLS], index, notes)
