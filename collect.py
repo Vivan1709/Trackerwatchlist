@@ -63,12 +63,16 @@ class NSE:
     def api(self, path: str):
         for attempt in range(3):
             r = self.s.get(self.base + path, timeout=30)
-            if r.status_code == 200 and r.text.lstrip().startswith(("{", "[")):
-                return r.json()
+            body = r.text.lstrip("\ufeff \r\n\t")
+            if r.status_code == 200:
+                try:
+                    return json.loads(body)
+                except ValueError:
+                    last = body[:160].replace("\n", " ")
             time.sleep(4 * (attempt + 1))
             if attempt == 1:
                 self.s.get(self.base + "/", timeout=30)
-        raise RuntimeError(f"{path}: HTTP {r.status_code}")
+        raise RuntimeError(f"{path}: HTTP {r.status_code} {locals().get('last', '')}")
 
     def text(self, url: str) -> str:
         r = self.s.get(url, timeout=60)
