@@ -261,11 +261,12 @@ def collect_holders(nse: NSE, index: dict, notes: list) -> None:
                 if p not in seen:          # first listed = latest submission for that quarter (revisions included)
                     seen.add(p)
                     uniq.append(f)
-            filings = sorted(uniq, key=lambda f: iso(f["date"]), reverse=True)[:2]
+            filings = sorted(uniq, key=lambda f: iso(f["date"]), reverse=True)[:5]
             if not filings:
                 continue
             latest = iso(filings[0]["date"])
-            if stored["q"] and stored["q"][0].get("period") == latest and "totals" in stored["q"][0]:
+            if (stored["q"] and stored["q"][0].get("period") == latest and "totals" in stored["q"][0]
+                    and len(stored["q"]) >= min(5, len(filings))):
                 continue
             have = {q["period"]: q for q in stored["q"]}
             quarters = []
@@ -313,6 +314,22 @@ def collect_companies(nse: NSE, index: dict, notes: list) -> None:
         notes.append(f"company list: {len(out)}")
 
 
+def collect_prices(nse: NSE, symbols: list, notes: list) -> None:
+    prices = load(DATA / "prices.json", {})
+    for sym in symbols:
+        try:
+            q = nse.api(f"/api/quote-equity?symbol={sym}")
+            p = q.get("priceInfo", {})
+            hl = p.get("weekHighLow", {}) or {}
+            prices[sym] = {"price": p.get("lastPrice"), "change": p.get("change"), "pct": p.get("pChange"),
+                           "prev": p.get("previousClose"), "high52": hl.get("max"), "low52": hl.get("min"),
+                           "time": q.get("metadata", {}).get("lastUpdateTime") or datetime.now(timezone.utc).isoformat(timespec="seconds")}
+        except Exception as e:
+            notes.append(f"price {sym} failed: {str(e)[:80]}")
+        time.sleep(0.6)
+    save(DATA / "prices.json", prices)
+
+
 def main() -> int:
     index = load(DATA / "index.json", {"days": [], "holders": []})
     notes, ok = [], True
@@ -329,6 +346,7 @@ def main() -> int:
         collect_holders(nse, index, notes)
         syms = [s.strip().upper() for s in load(ROOT / "portfolio.json", {}).get("symbols", []) if s.strip()]
         collect_txns(nse, syms[:MAX_HOLDER_SYMBOLS], index, notes)
+        collect_prices(nse, syms[:MAX_HOLDER_SYMBOLS], notes)
     except Exception as e:
         ok = False
         notes.append(f"failed: {e}")
