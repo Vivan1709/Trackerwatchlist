@@ -254,9 +254,13 @@ def merge_bse(nse: NSE, index: dict, notes: list) -> None:
             r.raise_for_status()
         except Exception:
             continue
-        for row in csv.DictReader(io.StringIO(r.content.decode("utf-8-sig"))):
+        text = r.content.decode("utf-8-sig", "replace")
+        if not text.startswith("TradDt") or text.count("\n") < 500:
+            continue   # not published yet for that day (BSE answers with a web page)
+        for row in csv.DictReader(io.StringIO(text)):
             code = str(row.get("FinInstrmId") or "").strip()
-            isin_of[code], name_of[code] = str(row.get("ISIN") or "").strip(), str(row.get("FinInstrmNm") or "").strip()
+            if code:
+                isin_of[code], name_of[code] = str(row.get("ISIN") or "").strip(), str(row.get("FinInstrmNm") or "").strip()
         if isin_of:
             break
     if not isin_of:
