@@ -263,10 +263,26 @@ const httpDb = () => {
     set: async d => { let k = ""; try { k = localStorage.getItem("bmt-key") || ""; } catch(e) {}
       const r = await fetch("/api/doc?path=" + encodeURIComponent(p), {method:"POST", headers:{"content-type":"application/json", "x-key":k}, body:JSON.stringify(d)}); const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status); return j; } })};
 };
+// on GitHub Pages the data files sit next to the page; changes to the portfolio go through a GitHub issue that starts the NSE fetch
+const REPO = "Vivan1709/Trackerwatchlist";
+const fileOf = p => p === "portfolio/main" ? "portfolio.json" : p === "meta/index" ? "data/index.json" : p === "meta/prices" ? "data/prices.json" : "data/" + p + ".json";
+const pagesDb = () => ({doc: p => ({
+  get: async () => { const r = await fetch(fileOf(p) + "?t=" + Date.now(), {cache:"no-store"}); if (r.status === 404) return {exists:false, data:null};
+    if (!r.ok) throw new Error("HTTP " + r.status); let d = await r.json();
+    if (p === "meta/prices") d = {p:d};
+    if (p === "portfolio/main") { let local = null; try { local = JSON.parse(localStorage.getItem("bmt-portfolio")); } catch(e) {}
+      if (!d.items) d = {items:(d.symbols || []).map(s => ({s, q:s})), follows:[]};
+      if (local?.updated && (!d.updated || local.updated > d.updated)) d = local; }
+    return {exists:true, data:d}; },
+  set: async d => { if (p !== "portfolio/main") return;
+    const old = new Set((S.portfolio?.items || []).map(i => i.s)), added = d.items.map(i => i.s).filter(s => !old.has(s));
+    const body = "Sent from the Big Money Tracker website. Submitting this saves your portfolio and fetches new companies from NSE.\n\n```json\n" + JSON.stringify({items:d.items, follows:d.follows, updated:d.updated}) + "\n```";
+    const url = `https://github.com/${REPO}/issues/new?title=${encodeURIComponent("Portfolio update" + (added.length ? ": add " + added.join(", ") : ""))}&body=${encodeURIComponent(body)}`;
+    window.open(url, "_blank", "noopener"); } })});
 const timeout = (p, ms) => Promise.race([p, new Promise(r => setTimeout(() => r(null), ms))]);
 
 async function boot(){
-  const [c, d] = await Promise.all([fetch("companies.json").then(r => r.json()).catch(() => []), window.claude?.use ? timeout(window.claude.use("db"), 10000) : Promise.resolve(location.protocol.startsWith("http") && !/claude|localhost/.test(location.hostname) ? httpDb() : null)]);
+  const [c, d] = await Promise.all([fetch("companies.json").then(r => r.json()).catch(() => []), window.claude?.use ? timeout(window.claude.use("db"), 10000) : Promise.resolve(/github\.io$/.test(location.hostname) ? pagesDb() : location.protocol.startsWith("http") && !/claude|localhost|127\.0\.0\.1/.test(location.hostname) ? httpDb() : null)]);
   S.companies = c; db = d; dbState = db ? "on" : "off";
   if (db) {
     S.portfolio = await getDoc("portfolio/main");

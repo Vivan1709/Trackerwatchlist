@@ -1,0 +1,54 @@
+name: Portfolio update from the website
+on:
+  issues:
+    types: [opened]
+permissions:
+  contents: write
+  issues: write
+  actions: write
+concurrency:
+  group: portfolio
+  cancel-in-progress: false
+jobs:
+  update:
+    if: github.event.issue.user.login == github.repository_owner && startsWith(github.event.issue.title, 'Portfolio update')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests==2.32.3
+      - name: Save the portfolio
+        id: save
+        env:
+          BODY: ${{ github.event.issue.body }}
+        run: |
+          python - <<'PY'
+          import json, os, re
+          m = re.search(r"```json\s*(\{.*?\})\s*```", os.environ["BODY"], re.S)
+          new = json.loads(m.group(1))
+          items = [i for i in new.get("items", []) if re.fullmatch(r"[A-Z0-9&_\-]{1,20}", str(i.get("s", "")))][:100]
+          old = json.load(open("portfolio.json"))
+          doc = {"symbols": [i["s"] for i in items], "items": items, "follows": new.get("follows", [])[:50], "updated": new.get("updated")}
+          json.dump(doc, open("portfolio.json", "w"), indent=1)
+          added = [s for s in doc["symbols"] if s not in old.get("symbols", [])]
+          open(os.environ["GITHUB_OUTPUT"], "a").write(f"added={','.join(added)}\n")
+          PY
+      - name: Fetch new companies from NSE
+        if: steps.save.outputs.added != ''
+        run: python collect.py || true
+        env:
+          ONLY_SYMBOLS: ${{ steps.save.outputs.added }}
+      - name: Commit, publish and close
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "big-money-tracker-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add portfolio.json data
+          git diff --cached --quiet || git commit -m "Portfolio update from the website"
+          for i in 1 2 3; do git pull --rebase -X theirs origin main && git push && break; sleep 5; done
+          gh workflow run pages.yml --ref main
+          gh issue close ${{ github.event.issue.number }} --comment "Saved. ${{ steps.save.outputs.added && format('Fetched {0} from NSE. ', steps.save.outputs.added) || '' }}The website updates in about a minute."
