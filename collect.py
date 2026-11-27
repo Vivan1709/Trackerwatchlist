@@ -237,6 +237,61 @@ def collect_latest_filings(nse: NSE, notes: list) -> None:
     notes.append(f"latest filings: {sum(map(len, by.values()))} seen, {changed} companies updated")
 
 
+def merge_bse(nse: NSE, index: dict, notes: list) -> None:
+    """BSE bulk/block deals (read on the user's computer, saved in data/bse/raw) merged into the same day and company files as NSE's."""
+    import csv, io
+    from datetime import date, timedelta
+    raw = sorted((DATA / "bse" / "raw").glob("*.json")) if (DATA / "bse" / "raw").exists() else []
+    done = index.setdefault("bseMerged", {})
+    todo = [f for f in raw if done.get(f.stem) != len(load(f, {}).get("rows", []))]
+    if not todo:
+        return
+    isin_of, name_of = {}, {}
+    for back in range(0, 8):
+        d = date.today() - timedelta(days=back)
+        try:
+            text = nse.text(f"https://www.bseindia.com/download/BhavCopy/Equity/BhavCopy_BSE_CM_0_0_0_{d:%Y%m%d}_F_0000.CSV")
+        except Exception:
+            continue
+        rd = csv.DictReader(io.StringIO(text))
+        for r in rd:
+            isin_of[str(r.get("FinInstrmId", "")).strip()] = str(r.get("ISIN", "")).strip()
+            name_of[str(r.get("FinInstrmId", "")).strip()] = str(r.get("FinInstrmNm", "")).strip()
+        if isin_of:
+            break
+    nse_of = load(DATA / "isin.json", {})
+    bse_only = {c[0]: c[1] for c in load(DATA / "bse" / "companies.json", [])}
+    nse_syms = {c[0] for c in load(DATA / "companies.json", [])}
+    added = 0
+    for f in todo:
+        day_rows = load(f, {}).get("rows", [])
+        path = DATA / "days" / f"{f.stem}.json"
+        cur = load(path, {"rows": []})
+        have = {json.dumps(r) for r in cur["rows"]}
+        for code, ticker, client, side, qty, price, kind in day_rows:
+            sym = nse_of.get(isin_of.get(code, ""), "")
+            name = name_of.get(code, ticker)
+            if not sym:
+                sym = ticker if ticker not in nse_syms else f"{ticker}-BSE"
+                bse_only[sym] = name
+            row = [sym, name, client, side, qty, price, kind]
+            if json.dumps(row) in have:
+                continue
+            cur["rows"].append(row); have.add(json.dumps(row)); added += 1
+            co = DATA / "co" / f"{sym}.json"
+            if co.exists():
+                c = load(co, {})
+                if [f.stem] + row not in c.get("d", []):
+                    c["d"] = sorted(c.get("d", []) + [[f.stem] + row], key=lambda r: r[0], reverse=True)[:150]
+                    save(co, c)
+        cur.setdefault("fetched", datetime.now(timezone.utc).isoformat(timespec="seconds"))
+        save(path, cur)
+        index["days"].append(f.stem)
+        done[f.stem] = len(day_rows)
+    save(DATA / "bse" / "companies.json", sorted([s, n] for s, n in bse_only.items()))
+    notes.append(f"BSE deals merged: {added}")
+
+
 def collect_txns(nse: NSE, symbols: list, index: dict, notes: list, light: bool = False) -> None:
     """Insider (SEBI PIT) and substantial-acquisition (SAST Reg 29) disclosures, last 365 days, per company."""
     from datetime import date, timedelta
@@ -381,12 +436,12 @@ def collect_holders(nse: NSE, index: dict, notes: list, symbols: list = None) ->
 
 def collect_companies(nse: NSE, index: dict, notes: list) -> None:
     today = datetime.now(timezone.utc).date().isoformat()
-    if index.get("companiesAt") == today:
+    if index.get("companiesAt") == today and (DATA / "isin.json").exists():
         return
     import csv, io
     host = nse.base.replace("://www.", "://nsearchives.")
     rows = list(csv.reader(io.StringIO(nse.text(host + "/content/equities/EQUITY_L.csv"))))
-    out = []
+    out, isins = [], {}
     for r in rows[1:]:
         if len(r) >= 2 and r[0].strip():
             name = r[1].strip()
@@ -394,8 +449,11 @@ def collect_companies(nse: NSE, index: dict, notes: list) -> None:
                 if name.endswith(suffix):
                     name = name[: -len(suffix)]
             out.append([r[0].strip(), name])
+            if len(r) > 6 and r[6].strip():
+                isins[r[6].strip()] = r[0].strip()
     if len(out) > 1500:
         save(DATA / "companies.json", out)
+        save(DATA / "isin.json", isins)
         index["companiesAt"] = today
         notes.append(f"company list: {len(out)}")
 
@@ -563,6 +621,10 @@ def main() -> int:
         quick = bool(os.environ.get("ONLY_SYMBOLS", "").strip())   # a company was just added: fetch only that, fast
         if not quick:
             collect_deals(nse, index, notes)
+            try:
+                merge_bse(nse, index, notes)
+            except Exception as e:
+                notes.append(f"BSE merge failed: {e}")
             try:
                 collect_latest_filings(nse, notes)
             except Exception as e:

@@ -353,6 +353,7 @@ async function afterLogin(){
 async function boot(){
   const [c, d] = await Promise.all([fetch("companies.json").then(r => r.json()).catch(() => []), window.claude?.use ? timeout(window.claude.use("db"), 10000) : Promise.resolve(PAGES ? pagesDb() : location.protocol.startsWith("http") && !/claude|localhost|127\.0\.0\.1/.test(location.hostname) ? httpDb() : null)]);
   S.companies = c; db = d; dbState = db ? "on" : "off";
+  if (PAGES) { try { const b = await fetch("data/bse/companies.json", {cache:"no-store"}).then(r => r.ok ? r.json() : []); const have = new Set(c.map(x => x[0])); S.companies = c.concat(b.filter(x => !have.has(x[0])).map(([s, n]) => [s, n + " (BSE)"])); } catch(e) {} }
   if (db) {
     S.portfolio = await getDoc("portfolio/main");
     S.meta = await getDoc("meta/index");
@@ -403,7 +404,7 @@ function transactions(syms){
   const set = new Set(syms), out = [];
   const prom = new Map(syms.map(s => [s, new Set([...(S.holders.get(s)?.q?.[0]?.rows || []).filter(([n, p, g]) => categorize(n, g) === "Promoter").map(r => norm(r[0])),
     ...(S.txns.get(s)?.rows || []).filter(r => r.cat === "Y" || /promoter/i.test(r.cat)).map(r => norm(r.who))])]));
-  for (const x of allDeals()) if (set.has(x.s)) out.push({d:x.d, s:x.s, who:x.c, cat: prom.get(x.s).has(norm(x.c)) ? "Promoter" : x.cat, src:x.ty === "Block" ? "Block deal" : "Bulk deal", side:x.side, act:x.side === "BUY" ? "Bought" : "Sold", qty:x.q, price:x.p, value:x.v, after:null});
+  for (const x of allDeals()) if (set.has(x.s)) out.push({d:x.d, s:x.s, who:x.c, cat: prom.get(x.s).has(norm(x.c)) ? "Promoter" : x.cat, src:x.ty + " deal", side:x.side, act:x.side === "BUY" ? "Bought" : "Sold", qty:x.q, price:x.p, value:x.v, after:null});
   for (const s of syms) for (const r of (S.txns.get(s)?.rows || [])) {
     const d = pd(r.date); if (!d) continue;
     const side = sideOf(r.type || r.mode), qty = +r.qty || null, price = +r.price || null;
@@ -430,11 +431,12 @@ function allDeals(){
   for (const [d, v] of S.days) { const dt = pd(d); for (const r of v.rows || []) {
     const [s, co, c, side, q, p, ty] = r; const C = String(c).toUpperCase();
     if (HFT.some(h => C.includes(h))) continue;
-    out.push({d:dt, s, co, c:C, side: side === "B" ? "BUY" : "SELL", q:+q, p:+p, v:q*p/1e7, ty: ty === "K" ? "Block" : "Bulk", cat:categorize(C)}); } }
+    out.push({d:dt, s, co, c:C, side: side === "B" ? "BUY" : "SELL", q:+q, p:+p, v:q*p/1e7, ty: {K:"Block", U:"Bulk", BK:"BSE block", BU:"BSE bulk"}[ty] || "Bulk", cat:categorize(C)}); } }
   // NSE lists a trade that is both a block deal and 0.5%+ of the company in both reports: keep it once, as the block deal
   const bk = x => [+x.d, x.s, x.c, x.side, x.q, x.p].join("|");
-  const blocks = new Set(out.filter(x => x.ty === "Block").map(bk));
-  const uniq = out.filter(x => x.ty === "Block" || !blocks.has(bk(x)));
+  const isBlock = x => /lock$/.test(x.ty);
+  const blocks = new Set(out.filter(isBlock).map(bk));
+  const uniq = out.filter(x => isBlock(x) || !blocks.has(bk(x)));
   const sides = new Map(); for (const x of uniq){ const k = +x.d + "|" + x.s + "|" + x.c; sides.set(k, (sides.get(k) || new Set()).add(x.side)); }
   return uniq.filter(x => sides.get(+x.d + "|" + x.s + "|" + x.c).size < 2);
 }
@@ -697,7 +699,7 @@ function renderCompany(s){
     else h += pending ? (PAGES ? `<div class="empty"><strong>${esc(s)} isn't collected yet</strong>The background collection reaches every NSE company, most traded first. To get it right now, tap below and then Submit on GitHub; it arrives in about 2 minutes.<div class="actions"><a class="btn" href="${esc(fetchNowUrl(s))}" target="_blank" rel="noopener">Get it now</a></div></div>`
         : `<div class="empty"><strong>Getting ${esc(s)} from NSE now</strong>Deals, insider trades and shareholders usually arrive in a minute or two. The page updates by itself.</div>`)
       : `<p class="note">No disclosed buying or selling in the last year${f === "all" ? "" : " by this group"}.</p>`;
-    h += `<p class="note">Covers bulk and block deals, promoter and director trades, and large-stake (5%+) filings on NSE.</p>`;
+    h += `<p class="note">Covers NSE and BSE bulk and block deals, promoter and director trades, and large-stake (5%+) filings.</p>`;
     const open = S.openHolders === s;
     h += `<div class="actions"><button class="btn" id="vh" aria-expanded="${open}">${open ? "Hide major shareholders" : "View major shareholders"}</button></div><div id="mh">${open ? majorHolders(s, S.holderN || 10) : ""}</div>`;
     view.innerHTML = h;
@@ -723,7 +725,7 @@ function followMatches(name){
   const core = fkey(name).split(" ").filter(w => w && !GENERIC.has(w)), isMF = /MUTUAL FUND/.test(fkey(name));
   const hit = (n, cat) => { const w = fkey(n).split(" "); return core.length && core.every(c => w.includes(c)) && (!isMF || !cat || cat === "DII - Mutual Fund"); };
   const syms = (S.portfolio?.items || []).map(i => i.s);
-  const deals = allDeals().filter(x => hit(x.c, x.cat)).map(x => ({d:x.d, s:x.s, who:x.c, cat:x.cat, src:x.ty === "Block" ? "Block deal" : "Bulk deal", side:x.side, act:x.side === "BUY" ? "Bought" : "Sold", qty:x.q, price:x.p, value:x.v, after:null}));
+  const deals = allDeals().filter(x => hit(x.c, x.cat)).map(x => ({d:x.d, s:x.s, who:x.c, cat:x.cat, src:x.ty + " deal", side:x.side, act:x.side === "BUY" ? "Bought" : "Sold", qty:x.q, price:x.p, value:x.v, after:null}));
   const tx = transactions(syms).filter(x => /Insider|Large/.test(x.src) && hit(x.who, x.cat));
   const holds = [];
   for (const s of syms) { const q = S.holders.get(s)?.q || []; const now = (q[0]?.rows || []).find(r => hit(r[0], categorize(r[0], r[2]))); const was = (q[1]?.rows || []).find(r => hit(r[0], categorize(r[0], r[2])));
