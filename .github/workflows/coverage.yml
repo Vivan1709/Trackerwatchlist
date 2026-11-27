@@ -1,0 +1,38 @@
+name: Collect every NSE company
+on:
+  schedule:
+    - cron: "15,45 * * * *"   # every 30 minutes, all day
+  workflow_dispatch: {}
+permissions:
+  contents: write
+  actions: write
+concurrency:
+  group: coverage
+  cancel-in-progress: false
+jobs:
+  cover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests==2.32.3
+      - run: python collect.py --cover ${{ matrix.shard }} 4 60
+      - name: Save
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "big-money-tracker-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data/co data/holders data/txns data/corp data/deals
+          git diff --cached --quiet && exit 0
+          git commit -qm "Background NSE collection, shard ${{ matrix.shard }}"
+          for i in 1 2 3 4 5; do git pull -q --rebase -X theirs origin main && git push -q && break; sleep $((RANDOM % 10 + 3)); done
+          gh workflow run pages.yml --ref main || true

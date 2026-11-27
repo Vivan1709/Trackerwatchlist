@@ -266,23 +266,32 @@ const httpDb = () => {
 // on GitHub Pages the data files sit next to the page; changes to the portfolio go through a GitHub issue that starts the NSE fetch
 const REPO = "Vivan1709/Trackerwatchlist";
 const fileOf = p => p === "portfolio/main" ? "portfolio.json" : p === "meta/index" ? "data/index.json" : p === "meta/prices" ? "data/prices.json" : "data/" + p + ".json";
+const coCache = new Map();
+const coFile = s => { if (!coCache.has(s)) coCache.set(s, fetch("data/co/" + s + ".json?t=" + Math.floor(Date.now() / 60000), {cache:"no-store"}).then(r => r.ok ? r.json() : null).catch(() => null).then(co => {
+    if (!co) { coCache.delete(s); return null; }
+    if (co.p && !S.prices[s]) S.prices[s] = co.p;
+    for (const [day, ...row] of co.d || []) { const v = S.days.get(day) || {rows: []}; const k = JSON.stringify(row);
+      if (!v.rows.some(r => JSON.stringify(r) === k)) v.rows.push(row); S.days.set(day, v); }
+    return co; })); return coCache.get(s); };
+const PAGES = /github\.io$/.test(location.hostname) || /[?&]pages=1/.test(location.search);
 const pagesDb = () => ({doc: p => ({
-  get: async () => { const r = await fetch(fileOf(p) + "?t=" + Date.now(), {cache:"no-store"}); if (r.status === 404) return {exists:false, data:null};
+  get: async () => {
+    const m = p.match(/^(holders|txns|corp)\/(.+)$/);
+    if (m) { const co = await coFile(m[2]); if (!co) return {exists:false, data:null};
+      return {exists:true, data: m[1] === "holders" ? {q: co.h || []} : m[1] === "txns" ? {rows: co.t || []} : co.c || {}}; }
+    const r = await fetch(fileOf(p) + "?t=" + Date.now(), {cache:"no-store"}); if (r.status === 404) return {exists:false, data:null};
     if (!r.ok) throw new Error("HTTP " + r.status); let d = await r.json();
     if (p === "meta/prices") d = {p:d};
     if (p === "portfolio/main") { let local = null; try { local = JSON.parse(localStorage.getItem("bmt-portfolio")); } catch(e) {}
       if (!d.items) d = {items:(d.symbols || []).map(s => ({s, q:s})), follows:[]};
       if (local?.updated && (!d.updated || local.updated > d.updated)) d = local; }
     return {exists:true, data:d}; },
-  set: async d => { if (p !== "portfolio/main") return;
-    const old = new Set((S.portfolio?.items || []).map(i => i.s)), added = d.items.map(i => i.s).filter(s => !old.has(s));
-    const body = "Sent from the Big Money Tracker website. Submitting this saves your portfolio and fetches new companies from NSE.\n\n```json\n" + JSON.stringify({items:d.items, follows:d.follows, updated:d.updated}) + "\n```";
-    const url = `https://github.com/${REPO}/issues/new?title=${encodeURIComponent("Portfolio update" + (added.length ? ": add " + added.join(", ") : ""))}&body=${encodeURIComponent(body)}`;
-    window.open(url, "_blank", "noopener"); } })});
+  set: async d => {} })});   // the portfolio lives in this browser; every NSE company is already collected
+const fetchNowUrl = s => `https://github.com/${REPO}/issues/new?title=${encodeURIComponent("Portfolio update: add " + s)}&body=${encodeURIComponent("Fetch this company from NSE now.\n\n```json\n" + JSON.stringify({items:S.portfolio?.items || [], follows:follows(), updated:new Date().toISOString()}) + "\n```")}`;
 const timeout = (p, ms) => Promise.race([p, new Promise(r => setTimeout(() => r(null), ms))]);
 
 async function boot(){
-  const [c, d] = await Promise.all([fetch("companies.json").then(r => r.json()).catch(() => []), window.claude?.use ? timeout(window.claude.use("db"), 10000) : Promise.resolve(/github\.io$/.test(location.hostname) ? pagesDb() : location.protocol.startsWith("http") && !/claude|localhost|127\.0\.0\.1/.test(location.hostname) ? httpDb() : null)]);
+  const [c, d] = await Promise.all([fetch("companies.json").then(r => r.json()).catch(() => []), window.claude?.use ? timeout(window.claude.use("db"), 10000) : Promise.resolve(PAGES ? pagesDb() : location.protocol.startsWith("http") && !/claude|localhost|127\.0\.0\.1/.test(location.hostname) ? httpDb() : null)]);
   S.companies = c; db = d; dbState = db ? "on" : "off";
   if (db) {
     S.portfolio = await getDoc("portfolio/main");
@@ -303,7 +312,7 @@ let pollT = null;
 function waitFor(s, again){
   clearTimeout(pollT);
   pollT = setTimeout(async () => {
-    S.holders.delete(s); S.txns.delete(s); S.corp.delete(s);
+    S.holders.delete(s); S.txns.delete(s); S.corp.delete(s); coCache.delete(s);
     S.meta = await getDoc("meta/index") || S.meta; S.prices = (await getDoc("meta/prices"))?.p || S.prices;
     await loadDays(); again();
   }, 20000);
@@ -613,7 +622,8 @@ function renderCompany(s){
     h += `<div class="filters" role="group" aria-label="Show investors">${GROUPS.map(([k, l]) => `<button data-f="${k}" aria-pressed="${k === f}">${l}</button>`).join("")}</div>`;
     if (month.length) h += txnRows(month, false);
     else if (tx.length) h += `<p class="note">No buying or selling disclosed since 1 ${now.toLocaleString("en-IN",{month:"long"})}. The latest ones before that:</p>` + txnRows(tx.slice(0, 5), false);
-    else h += pending ? `<div class="empty"><strong>Getting ${esc(s)} from NSE now</strong>Deals, insider trades and shareholders usually arrive in a minute or two. The page updates by itself.</div>`
+    else h += pending ? (PAGES ? `<div class="empty"><strong>${esc(s)} isn't collected yet</strong>The background collection reaches every NSE company, most traded first. To get it right now, tap below and then Submit on GitHub; it arrives in about 2 minutes.<div class="actions"><a class="btn" href="${esc(fetchNowUrl(s))}" target="_blank" rel="noopener">Get it now</a></div></div>`
+        : `<div class="empty"><strong>Getting ${esc(s)} from NSE now</strong>Deals, insider trades and shareholders usually arrive in a minute or two. The page updates by itself.</div>`)
       : `<p class="note">No disclosed buying or selling in the last year${f === "all" ? "" : " by this group"}.</p>`;
     h += `<p class="note">Covers bulk and block deals, promoter and director trades, and large-stake (5%+) filings on NSE.</p>`;
     const open = S.openHolders === s;

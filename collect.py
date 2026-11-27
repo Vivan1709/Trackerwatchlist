@@ -182,31 +182,23 @@ def collect_deal_history(nse: NSE, symbols: list, index: dict, notes: list) -> N
                 except (KeyError, ValueError, TypeError):
                     continue
             time.sleep(1)
-        n = 0
-        for day, rows in add.items():
-            f = DATA / "days" / f"{day}.json"
-            cur = load(f, {"rows": []})
-            have = {json.dumps(x) for x in cur["rows"]}
-            new = [x for x in rows if json.dumps(x) not in have]
-            if new:
-                cur["rows"] += new
-                cur.setdefault("fetched", datetime.now(timezone.utc).isoformat(timespec="seconds"))
-                save(f, cur)
-                index["days"].append(day)
-                n += len(new)
+        rows = sorted([[day] + r for day, rs in add.items() for r in rs], key=lambda r: r[0], reverse=True)
+        n = len(rows)
+        if not failed or rows:
+            save(DATA / "deals" / f"{sym}.json", {"rows": rows, "at": str(to)})
         if not failed:
             done[sym] = str(to)
-        notes.append(f"history {sym}: {sum(map(len, add.values()))} deals in a year, {n} new")
+        notes.append(f"history {sym}: {n} deals in a year")
 
 
-def collect_txns(nse: NSE, symbols: list, index: dict, notes: list) -> None:
+def collect_txns(nse: NSE, symbols: list, index: dict, notes: list, light: bool = False) -> None:
     """Insider (SEBI PIT) and substantial-acquisition (SAST Reg 29) disclosures, last 365 days, per company."""
     from datetime import date, timedelta
     for sym in symbols:
         old = load(DATA / "txns" / f"{sym}.json", {})
         full = not old or (old.get("fullAt", "")[:10] != str(date.today()))
         windows, end = [], date.today()
-        for _ in range(4 if full else 1):
+        for _ in range(0 if light else 4 if full else 1):
             windows.append((end - timedelta(days=90), end))
             end -= timedelta(days=91)
         rows, errs, seen = [], [], set()
@@ -292,8 +284,8 @@ def portfolio_symbols() -> list:
     return only or [s.strip().upper() for s in load(ROOT / "portfolio.json", {}).get("symbols", []) if s.strip()]
 
 
-def collect_holders(nse: NSE, index: dict, notes: list) -> None:
-    symbols = portfolio_symbols()
+def collect_holders(nse: NSE, index: dict, notes: list, symbols: list = None) -> None:
+    symbols = portfolio_symbols() if symbols is None else symbols
     done = 0
     for sym in symbols:
         if done >= MAX_HOLDER_SYMBOLS:
@@ -454,6 +446,67 @@ def collect_corporate(nse: NSE, symbols: list, index: dict, notes: list) -> None
         notes.append(f"corp {sym}: {len(out['pledge'])} pledge rows, {len(out['allot'])} allotments" + (f" ({'; '.join(out['errors'])})" if out["errors"] else ""))
 
 
+def build_co(sym: str, price: dict = None) -> None:
+    """Everything the website shows for one company, in one small file."""
+    h = load(DATA / "holders" / f"{sym}.json", {}).get("q", [])
+    t = load(DATA / "txns" / f"{sym}.json", {}).get("rows", [])
+    c = load(DATA / "corp" / f"{sym}.json", {})
+    d = load(DATA / "deals" / f"{sym}.json", {}).get("rows", [])
+    old = load(DATA / "co" / f"{sym}.json", {})
+    save(DATA / "co" / f"{sym}.json", {"h": h, "t": t[:60], "c": {"pledge": c.get("pledge", [])[:2], "allot": c.get("allot", [])[:15]},
+                                       "d": d[:150], "p": price or old.get("p"), "at": datetime.now(timezone.utc).isoformat(timespec="seconds")})
+
+
+def bhav_all(nse: NSE) -> dict:
+    """Latest official close for every NSE equity, from the daily bhavcopy, with traded value for ranking."""
+    import csv, io
+    from datetime import date, timedelta
+    host = nse.base.replace("://www.", "://nsearchives.")
+    for back in range(0, 7):
+        d = date.today() - timedelta(days=back)
+        try:
+            text = nse.text(f"{host}/products/content/sec_bhavdata_full_{d:%d%m%Y}.csv")
+        except Exception:
+            continue
+        out = {}
+        for r in csv.reader(io.StringIO(text)):
+            if len(r) > 11 and r[1].strip() == "EQ":
+                close, prev = _num(r[8]), _num(r[3])
+                out[r[0].strip()] = {"price": close, "prev": prev, "change": round(close - prev, 2) if close and prev else None,
+                                     "pct": round((close / prev - 1) * 100, 2) if close and prev else None,
+                                     "time": f"close {d:%d %b %Y}", "live": False, "tv": _num(r[11]) or 0}
+        if out:
+            return out
+    return {}
+
+
+def cover(shard: int, shards: int, limit: int) -> int:
+    """Background: keep every NSE company collected, most traded first, refreshing each one weekly."""
+    from datetime import timedelta
+    nse = NSE()
+    bhav = bhav_all(nse)
+    ranked = sorted(bhav, key=lambda s: -bhav[s]["tv"])
+    mine = [s for i, s in enumerate(ranked) if i % shards == shard]
+    week = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    todo = [s for s in mine if load(DATA / "co" / f"{s}.json", {}).get("at", "") < week][:limit]
+    notes, index = [], {"days": [], "holders": []}
+    started = time.time()
+    for s in todo:
+        if time.time() - started > 17 * 60:
+            break
+        try:
+            collect_holders(nse, index, notes, [s])
+            collect_deal_history(nse, [s], {}, notes)
+            collect_txns(nse, [s], index, notes, light=True)
+            collect_corporate(nse, [s], index, notes)
+            p = dict(bhav.get(s, {})); p.pop("tv", None)
+            build_co(s, p)
+        except Exception as e:
+            notes.append(f"{s} failed: {e}")
+    print(f"shard {shard}: {len(todo)} to do, notes: {notes[-5:]}")
+    return 0
+
+
 def main() -> int:
     index = load(DATA / "index.json", {"days": [], "holders": []})
     notes, ok = [], True
@@ -473,6 +526,9 @@ def main() -> int:
         collect_txns(nse, syms[:MAX_HOLDER_SYMBOLS], index, notes)
         collect_prices(nse, syms[:MAX_HOLDER_SYMBOLS], notes)
         collect_corporate(nse, syms[:MAX_HOLDER_SYMBOLS], index, notes)
+        prices = load(DATA / "prices.json", {})
+        for s in syms[:MAX_HOLDER_SYMBOLS]:
+            build_co(s, prices.get(s))
     except Exception as e:
         ok = False
         notes.append(f"failed: {e}")
@@ -487,4 +543,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "--cover":
+        sys.exit(cover(int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])))
     sys.exit(main())
