@@ -238,13 +238,12 @@ def collect_latest_filings(nse: NSE, notes: list) -> None:
 
 
 def merge_bse(nse: NSE, index: dict, notes: list) -> None:
-    """BSE bulk/block deals (read on the user's computer, saved in data/bse/raw) merged into the same day and company files as NSE's."""
+    """BSE bulk/block deals (read on the owner's computer into data/bse/raw) rebuilt into the same day and company files as NSE's.
+    Rebuilt from scratch on every run, so a better NSE/BSE match fixes earlier rows by itself."""
     import csv, io
     from datetime import date, timedelta
     raw = sorted((DATA / "bse" / "raw").glob("*.json")) if (DATA / "bse" / "raw").exists() else []
-    done = index.setdefault("bseMerged", {})
-    todo = [f for f in raw if done.get(f.stem) != len(load(f, {}).get("rows", []))]
-    if not todo:
+    if not raw:
         return
     isin_of, name_of = {}, {}
     for back in range(0, 8):
@@ -253,49 +252,49 @@ def merge_bse(nse: NSE, index: dict, notes: list) -> None:
             r = requests.get(f"https://www.bseindia.com/download/BhavCopy/Equity/BhavCopy_BSE_CM_0_0_0_{d:%Y%m%d}_F_0000.CSV", timeout=60,
                              headers={"User-Agent": HEADERS["User-Agent"], "Referer": "https://www.bseindia.com/"})
             r.raise_for_status()
-            text = r.content.decode("utf-8-sig")
         except Exception:
             continue
-        rd = csv.DictReader(io.StringIO(text))
-        for r in rd:
-            isin_of[str(r.get("FinInstrmId", "")).strip()] = str(r.get("ISIN", "")).strip()
-            name_of[str(r.get("FinInstrmId", "")).strip()] = str(r.get("FinInstrmNm", "")).strip()
+        for row in csv.DictReader(io.StringIO(r.content.decode("utf-8-sig"))):
+            code = str(row.get("FinInstrmId") or "").strip()
+            isin_of[code], name_of[code] = str(row.get("ISIN") or "").strip(), str(row.get("FinInstrmNm") or "").strip()
         if isin_of:
             break
     if not isin_of:
         notes.append("BSE merge waiting: BSE price file unavailable")
         return
     nse_of = load(DATA / "isin.json", {})
-    bse_only = {c[0]: c[1] for c in load(DATA / "bse" / "companies.json", [])}
     nse_syms = {c[0] for c in load(DATA / "companies.json", [])}
-    added = 0
-    for f in todo:
-        day_rows = load(f, {}).get("rows", [])
+    bse_only, per_sym, total, matched = {}, {}, 0, 0
+    for f in raw:
         path = DATA / "days" / f"{f.stem}.json"
         cur = load(path, {"rows": []})
-        have = {json.dumps(r) for r in cur["rows"]}
-        for code, ticker, client, side, qty, price, kind in day_rows:
+        rows = [r for r in cur["rows"] if r[-1] not in ("BU", "BK")]
+        for code, ticker, client, side, qty, price, kind in load(f, {}).get("rows", []):
             sym = nse_of.get(isin_of.get(code, ""), "")
-            name = name_of.get(code, ticker)
-            if not sym:
+            name = name_of.get(code) or ticker
+            if sym:
+                matched += 1
+            else:
                 sym = ticker if ticker not in nse_syms else f"{ticker}-BSE"
                 bse_only[sym] = name
             row = [sym, name, client, side, qty, price, kind]
-            if json.dumps(row) in have:
-                continue
-            cur["rows"].append(row); have.add(json.dumps(row)); added += 1
-            co = DATA / "co" / f"{sym}.json"
-            if co.exists():
-                c = load(co, {})
-                if [f.stem] + row not in c.get("d", []):
-                    c["d"] = sorted(c.get("d", []) + [[f.stem] + row], key=lambda r: r[0], reverse=True)[:150]
-                    save(co, c)
+            if row not in rows:
+                rows.append(row)
+                per_sym.setdefault(sym, []).append([f.stem] + row)
+                total += 1
+        cur["rows"] = rows
         cur.setdefault("fetched", datetime.now(timezone.utc).isoformat(timespec="seconds"))
         save(path, cur)
         index["days"].append(f.stem)
-        done[f.stem] = len(day_rows)
+    for co in (DATA / "co").glob("*.json"):
+        c = load(co, {})
+        old = c.get("d", [])
+        new = [r for r in old if r[-1] not in ("BU", "BK")] + per_sym.get(co.stem, [])
+        if new != old:
+            c["d"] = sorted(new, key=lambda r: r[0], reverse=True)[:150]
+            save(co, c)
     save(DATA / "bse" / "companies.json", sorted([s, n] for s, n in bse_only.items()))
-    notes.append(f"BSE deals merged: {added}")
+    notes.append(f"BSE deals: {total}, {matched} matched to NSE companies")
 
 
 def collect_txns(nse: NSE, symbols: list, index: dict, notes: list, light: bool = False) -> None:
