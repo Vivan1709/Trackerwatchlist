@@ -4,30 +4,18 @@ on:
   push:
     branches: [main]
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 concurrency:
   group: pages
   cancel-in-progress: true
 jobs:
   publish:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
     steps:
       - uses: actions/checkout@v4
-      - name: Build the site folder
+      - name: Build the site folder and push it to the gh-pages branch
         run: |
-          mkdir -p _site
-          cp -r web/public/. _site/
-          cp -r data _site/data
-          cp portfolio.json _site/portfolio.json
-          touch _site/.nojekyll
-      - uses: actions/configure-pages@v5
-        with:
-          enablement: true
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: _site
-      - uses: actions/deploy-pages@v4
+          mkdir -p _site && cp -r web/public/. _site/ && cp -r data _site/data && cp portfolio.json _site/ && touch _site/.nojekyll
+          cd _site && git init -q -b gh-pages && git add -A
+          git -c user.name=big-money-tracker-bot -c user.email=actions@users.noreply.github.com commit -qm "Publish $(date -u +%FT%TZ)"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" gh-pages
