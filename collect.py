@@ -191,6 +191,52 @@ def collect_deal_history(nse: NSE, symbols: list, index: dict, notes: list) -> N
         notes.append(f"history {sym}: {n} deals in a year")
 
 
+def collect_latest_filings(nse: NSE, notes: list) -> None:
+    """Newest insider trades and 5%+ stake filings across the whole market, merged into each company's file as they appear."""
+    by = {}
+    for kind, path in (("Insider", "corporates-pit"), ("SAST", "corporate-sast-reg29")):
+        try:
+            res = nse.api(f"/api/{path}?index=equities")
+        except Exception as e:
+            notes.append(f"latest {kind} failed: {str(e)[:60]}")
+            continue
+        for r in (res.get("data", []) if isinstance(res, dict) else res) or []:
+            sym = str(r.get("symbol") or "").strip().upper()
+            if not sym:
+                continue
+            if kind == "Insider":
+                qty, val = _num(r.get("secAcq")), _num(r.get("secVal"))
+                row = {"src": "Insider", "date": _date(r.get("acqfromDt") or r.get("date")), "reported": _date(r.get("intimDt") or r.get("date")),
+                       "who": " ".join(str(r.get("acqName") or "").split()), "cat": r.get("personCategory") or "",
+                       "type": r.get("tdpTransactionType") or "", "mode": r.get("acqMode") or "", "sec": r.get("secType") or "",
+                       "qty": qty, "value": val, "price": round(val / qty, 2) if qty and val else None,
+                       "before": _num(r.get("befAcqSharesPer")), "after": _num(r.get("afterAcqSharesPer"))}
+            else:
+                acq, sale = _num(r.get("noOfShareAcq")) or 0, _num(r.get("noOfShareSale")) or 0
+                row = {"src": "SAST", "date": _date(r.get("acquirerDate") or r.get("date") or r.get("timestamp")), "reported": _date(r.get("timestamp")),
+                       "who": " ".join(str(r.get("acquirerName") or "").split()), "cat": r.get("promoterType") or "",
+                       "type": r.get("acqSaleType") or ("Sale" if sale > acq else "Acquisition"), "mode": r.get("acquisitionMode") or "",
+                       "sec": "", "qty": (acq or sale) or None, "value": None, "price": None, "before": None, "after": _num(r.get("totAftShare"))}
+            if row["date"] and row["who"]:
+                by.setdefault(sym, []).append(row)
+        time.sleep(1)
+    k = lambda r: (r["src"], r["date"], r["who"], r["qty"], r["type"])
+    changed = 0
+    for sym, rows in by.items():
+        path = DATA / "txns" / f"{sym}.json"
+        old = load(path, {})
+        have = {k(r) for r in old.get("rows", [])}
+        new = [r for r in rows if k(r) not in have]
+        if not new:
+            continue
+        merged = sorted(new + old.get("rows", []), key=lambda r: r["date"], reverse=True)[:400]
+        save(path, {**old, "rows": merged, "fetched": datetime.now(timezone.utc).isoformat(timespec="seconds")})
+        if (DATA / "co" / f"{sym}.json").exists():
+            build_co(sym)
+        changed += 1
+    notes.append(f"latest filings: {sum(map(len, by.values()))} seen, {changed} companies updated")
+
+
 def collect_txns(nse: NSE, symbols: list, index: dict, notes: list, light: bool = False) -> None:
     """Insider (SEBI PIT) and substantial-acquisition (SAST Reg 29) disclosures, last 365 days, per company."""
     from datetime import date, timedelta
@@ -515,6 +561,10 @@ def main() -> int:
         quick = bool(os.environ.get("ONLY_SYMBOLS", "").strip())   # a company was just added: fetch only that, fast
         if not quick:
             collect_deals(nse, index, notes)
+            try:
+                collect_latest_filings(nse, notes)
+            except Exception as e:
+                notes.append(f"latest filings failed: {e}")
             try:
                 collect_companies(nse, index, notes)
             except Exception as e:

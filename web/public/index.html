@@ -181,6 +181,10 @@ details{margin-top:.6rem}summary{cursor:pointer;color:var(--ink2);font-weight:60
 }
 @media (prefers-reduced-motion:no-preference){.bar{animation:grow .7s cubic-bezier(.2,.7,.2,1) both}@keyframes grow{from{transform:scaleX(0)}}}
 table.bbg td,table.bbg th{padding:.55rem .7rem}table.bbg tbody tr:nth-child(even){background:rgba(30,34,87,.04)}#mh{margin-top:1rem}#mh .btn{margin:.6rem 0}
+.acct{display:flex;gap:.8rem;align-items:center;font-size:.92rem;color:var(--mute,#5b6079);margin-top:.6rem}.acct button{font:inherit;background:none;border:0;color:var(--ink);text-decoration:underline;cursor:pointer;padding:.3rem}
+.login{max-width:420px;margin:1.5rem auto}.login h2{margin:.2rem 0 .4rem}.login input{width:100%;box-sizing:border-box;font:inherit;padding:.75rem .9rem;border:1.5px solid rgba(30,34,87,.2);border-radius:12px;margin:.25rem 0 .8rem;background:#fff}
+.login label{font-weight:600;font-size:.92rem}.login .btn{width:100%;justify-content:center;margin-top:.3rem}.login .alt{display:flex;justify-content:space-between;margin-top:1rem;font-size:.92rem}.login .alt button{background:none;border:0;color:var(--ink);text-decoration:underline;cursor:pointer;font:inherit;padding:.3rem 0}
+.login .or{text-align:center;margin:1rem 0 .6rem;font-size:.88rem;opacity:.7}.btn.google{background:#fff;color:var(--ink);border:1.5px solid rgba(30,34,87,.25)}
 </style>
 </head>
 <body>
@@ -188,12 +192,14 @@ table.bbg td,table.bbg th{padding:.55rem .7rem}table.bbg tbody tr:nth-child(even
 <header class="mast">
   <a class="name" href="#home">Big Money Tracker</a>
   <nav class="navl" aria-label="Sections"><a href="#portfolio" data-r="portfolio">Your companies</a><a href="#follow" data-r="follow">Investors you follow</a><a href="#market" data-r="market">Latest NSE deals</a><a href="#home" data-r="home">Edit portfolio</a></nav>
+  <div class="acct" id="acct" hidden></div>
 </header>
 <p class="status" id="status">Connecting…</p>
 <main id="view"><p class="loading">Loading…</p></main>
 <p class="foot">Data comes from NSE: daily bulk and block deals (trades of 0.5% or more of a company), insider trades by promoters and directors (SEBI PIT disclosures), large-stake filings (SEBI SAST: crossing 5% or moving 2% or more), and each company's quarterly shareholding filing (every holder with 1% or more). It is checked automatically every 30 minutes on weekdays and appears here within about an hour of NSE publishing it. Trading firms that buy and sell the same stock on the same day are left out. Not investment advice.</p>
 </div>
 
+<script src="account-config.js" onerror="window.FIREBASE_CONFIG=null"></script>
 <script>
 {
 const HFT = ["GRAVITON","HRTI","TOWER RESEARCH","ALPHAGREP","MICROCURVES","JUNOMONETA","QE SECURITIES","IRAGE","NK SECURITIES","SILVERLEAF","PACE STOCK","ELIXIR WEALTH","MANSI SHARE","JUMP TRADING","CITADEL SECURITIES","DOLAT","SHARE INDIA","OPTIVER","HUDSON RIVER","VIRTU","ESTEE ADVISORS","MUSIGMA","PRIMUS","RIGEL"];
@@ -290,6 +296,60 @@ const pagesDb = () => ({doc: p => ({
 const fetchNowUrl = s => `https://github.com/${REPO}/issues/new?title=${encodeURIComponent("Portfolio update: add " + s)}&body=${encodeURIComponent("Fetch this company from NSE now.\n\n```json\n" + JSON.stringify({items:S.portfolio?.items || [], follows:follows(), updated:new Date().toISOString()}) + "\n```")}`;
 const timeout = (p, ms) => Promise.race([p, new Promise(r => setTimeout(() => r(null), ms))]);
 
+// ---------------- accounts: sign in so your portfolio follows you to every device (Firebase, free)
+const AUTH = {on:false, user:null, fb:null};
+async function startAccounts(){
+  if (!PAGES || !window.FIREBASE_CONFIG) return;
+  const v = "10.12.2";
+  const [app, auth, fs] = await Promise.all([import(`https://www.gstatic.com/firebasejs/${v}/firebase-app.js`), import(`https://www.gstatic.com/firebasejs/${v}/firebase-auth.js`), import(`https://www.gstatic.com/firebasejs/${v}/firebase-firestore.js`)]);
+  const a = app.initializeApp(window.FIREBASE_CONFIG);
+  AUTH.fb = {auth, fs, A: auth.getAuth(a), D: fs.getFirestore(a)};
+  AUTH.on = true;
+  AUTH.user = await new Promise(res => { const off = auth.onAuthStateChanged(AUTH.fb.A, u => { off(); res(u); }); });
+}
+async function loadAccountPortfolio(){
+  const {fs, D} = AUTH.fb, ref = fs.doc(D, "users", AUTH.user.uid), snap = await fs.getDoc(ref);
+  if (snap.exists() && snap.data().items) return snap.data();
+  let local = null; try { local = JSON.parse(localStorage.getItem(LS)); } catch(e) {}
+  const start = local?.items?.length ? local : (S.portfolio?.items?.length ? S.portfolio : {items:[], follows:[]});
+  const p = {items:start.items || [], follows:start.follows || [], updated:new Date().toISOString(), email:AUTH.user.email || ""};
+  await fs.setDoc(ref, p); return p;
+}
+async function saveAccountPortfolio(p){ if (AUTH.on && AUTH.user) await AUTH.fb.fs.setDoc(AUTH.fb.fs.doc(AUTH.fb.D, "users", AUTH.user.uid), {...p, email:AUTH.user.email || ""}); }
+function acctBar(){
+  const el = document.getElementById("acct"); if (!AUTH.on || !AUTH.user) { el.hidden = true; return; }
+  el.hidden = false; el.innerHTML = `<span>Signed in as <b>${esc(AUTH.user.email || AUTH.user.displayName || "you")}</b></span><button id="signout">Sign out</button>`;
+  document.getElementById("signout").onclick = async () => { await AUTH.fb.auth.signOut(AUTH.fb.A); try { localStorage.removeItem(LS); } catch(e) {} location.hash = ""; location.reload(); };
+}
+const AUTH_ERR = c => ({"auth/invalid-credential":"Wrong email or password.","auth/wrong-password":"Wrong email or password.","auth/user-not-found":"No account with that email. Create one below.","auth/email-already-in-use":"That email already has an account. Sign in instead.","auth/weak-password":"Use at least 6 characters for the password.","auth/invalid-email":"That email address doesn't look right.","auth/popup-closed-by-user":"Google sign-in was closed before it finished.","auth/too-many-requests":"Too many tries. Wait a minute and try again."}[c] || "Couldn't sign in (" + c + ").");
+function renderLogin(mode = "in"){
+  document.querySelectorAll(".navl").forEach(n => n.hidden = true);
+  view.innerHTML = `<section class="login panel"><h2>${mode === "in" ? "Sign in" : "Create your account"}</h2>
+    <p class="note">${mode === "in" ? "Your portfolio and the investors you follow are saved to your account, on every device." : "Free. Your portfolio is saved to your account so it's there on your phone and computer."}</p>
+    <button class="btn google" id="g">Continue with Google</button><div class="or">or with email</div>
+    <form id="f"><label for="em">Email</label><input id="em" type="email" autocomplete="email" required>
+    <label for="pw">Password</label><input id="pw" type="password" autocomplete="${mode === "in" ? "current-password" : "new-password"}" minlength="6" required>
+    <button class="btn" type="submit">${mode === "in" ? "Sign in" : "Create account"}</button></form><p class="msg" id="lm"></p>
+    <div class="alt"><button id="sw">${mode === "in" ? "New here? Create an account" : "Have an account? Sign in"}</button>${mode === "in" ? `<button id="fp">Forgot password</button>` : ""}</div></section>`;
+  const {auth, A} = AUTH.fb, m = document.getElementById("lm"), done = u => { AUTH.user = u; document.querySelectorAll(".navl").forEach(n => n.hidden = false); afterLogin(); };
+  const fail = e => { m.textContent = AUTH_ERR(e.code || e.message); m.className = "msg err"; };
+  document.getElementById("sw").onclick = () => renderLogin(mode === "in" ? "up" : "in");
+  document.getElementById("g").onclick = () => auth.signInWithPopup(A, new auth.GoogleAuthProvider()).then(r => done(r.user)).catch(fail);
+  document.getElementById("f").onsubmit = e => { e.preventDefault(); const em = document.getElementById("em").value.trim(), pw = document.getElementById("pw").value;
+    m.textContent = "…"; m.className = "msg";
+    (mode === "in" ? auth.signInWithEmailAndPassword(A, em, pw) : auth.createUserWithEmailAndPassword(A, em, pw)).then(r => done(r.user)).catch(fail); };
+  const fp = document.getElementById("fp"); if (fp) fp.onclick = () => { const em = document.getElementById("em").value.trim();
+    if (!em) { m.textContent = "Type your email above first."; m.className = "msg err"; return; }
+    auth.sendPasswordResetEmail(A, em).then(() => { m.textContent = "Password reset email sent to " + em + "."; m.className = "msg ok"; }).catch(fail); };
+}
+async function afterLogin(){
+  view.innerHTML = `<p class="loading">Loading your portfolio…</p>`;
+  S.portfolio = await loadAccountPortfolio();
+  try { localStorage.setItem(LS, JSON.stringify(S.portfolio)); } catch(e) {}
+  acctBar();
+  location.hash = S.portfolio?.items?.length ? "portfolio" : "home"; route();
+}
+
 async function boot(){
   const [c, d] = await Promise.all([fetch("companies.json").then(r => r.json()).catch(() => []), window.claude?.use ? timeout(window.claude.use("db"), 10000) : Promise.resolve(PAGES ? pagesDb() : location.protocol.startsWith("http") && !/claude|localhost|127\.0\.0\.1/.test(location.hostname) ? httpDb() : null)]);
   S.companies = c; db = d; dbState = db ? "on" : "off";
@@ -300,9 +360,20 @@ async function boot(){
   }
   if (!S.portfolio) { try { S.portfolio = JSON.parse(localStorage.getItem(LS)); } catch(e) {} }
   await loadDays();
+  try { await startAccounts(); } catch(e) { console.warn("accounts unavailable", e); AUTH.on = false; }
+  if (AUTH.on && !AUTH.user) { renderLogin(); return; }
+  if (AUTH.on) return afterLogin();
   if (!location.hash) location.hash = S.portfolio?.items?.length ? "portfolio" : "home";
   route();
 }
+// keep an open page current: look for a new NSE check every 2 minutes and redraw when there is one
+setInterval(async () => {
+  if (!db || document.hidden) return;
+  const m = await getDoc("meta/index"); if (!m?.lastRun || m.lastRun === S.meta?.lastRun) return;
+  S.meta = m; coCache.clear(); S.holders.clear(); S.txns.clear(); S.corp.clear();
+  S.prices = (await getDoc("meta/prices"))?.p || S.prices; await loadDays();
+  if (!/^#(home)?$/.test(location.hash) && !(AUTH.on && !AUTH.user)) route();
+}, 120000);
 async function loadDays(){
   try { const seed = await (await fetch("seed.json")).json(); for (const [d, v] of Object.entries(seed)) if (!S.days.has(d)) S.days.set(d, v); } catch(e) {}
   const dates = (S.meta?.days || []).slice().sort().reverse().slice(0, 120);
@@ -373,7 +444,7 @@ function statusLine(){
   if (dbState === "off") { el.innerHTML = `Showing NSE deals up to ${S.days.size ? esc([...S.days.keys()].sort().at(-1)) : "the latest day"}. Live nightly updates appear when this page is opened signed in to Claude; your portfolio is saved in this browser for now.`; return; }
   const m = S.meta;
   if (dbErrors.length && !m) { el.innerHTML = "Showing the bundled latest NSE day. The live database didn't answer: " + esc(dbErrors[0]); return; }
-  el.innerHTML = m?.lastRun ? `Last collected from NSE <b>${esc(new Date(m.lastRun).toLocaleString("en-IN",{day:"2-digit",month:"short",hour:"numeric",minute:"2-digit"}))}</b>. Deals from <b>${S.days.size}</b> trading day${S.days.size === 1 ? "" : "s"}. NSE is checked every 30 minutes on weekdays.`
+  el.innerHTML = m?.lastRun ? `Last collected from NSE <b>${esc(new Date(m.lastRun).toLocaleString("en-IN",{day:"2-digit",month:"short",hour:"numeric",minute:"2-digit"}))}</b>. Deals from <b>${S.days.size}</b> trading day${S.days.size === 1 ? "" : "s"}. NSE is checked every 10 minutes in market hours and this page updates itself.`
     : "Waiting for the first nightly collection from NSE.";
 }
 
@@ -401,6 +472,7 @@ const coName = s => (S.companies.find(c => c[0] === s) || [s, s])[1];
 // ---------------- views
 const view = document.getElementById("view");
 function route(){
+  if (AUTH.on && !AUTH.user) return renderLogin();
   const h = location.hash.slice(1) || "home";
   document.querySelectorAll(".navl a").forEach(a => { if (h === a.dataset.r) a.setAttribute("aria-current","page"); else a.removeAttribute("aria-current"); });
   statusLine();
@@ -464,7 +536,7 @@ async function savePortfolio(){
   const m = document.getElementById("hmsg");
   if (!items.length) { m.textContent = "Pick at least one company."; m.className = "msg err"; return; }
   const p = {items, follows: follows(), updated:new Date().toISOString()};
-  try { await setDoc("portfolio/main", p); } catch(e) { m.textContent = "Couldn't save to the shared database: " + e.message + ". Saved in this browser instead."; m.className = "msg err"; }
+  try { await setDoc("portfolio/main", p); await saveAccountPortfolio(p); } catch(e) { m.textContent = "Couldn't save to your account: " + e.message + ". Saved in this browser instead."; m.className = "msg err"; }
   try { localStorage.setItem(LS, JSON.stringify(p)); } catch(e) {}
   S.portfolio = p; location.hash = "portfolio";
 }
@@ -641,7 +713,7 @@ const fkey = s => String(s).toUpperCase().replace(/[^A-Z0-9 ]/g, " ").replace(/\
 const follows = () => S.portfolio?.follows || [];
 async function saveFollows(list){
   const p = Object.assign({items: []}, S.portfolio || {}, {follows: list, updated: new Date().toISOString()});
-  try { await setDoc("portfolio/main", p); } catch(e) {}
+  try { await setDoc("portfolio/main", p); await saveAccountPortfolio(p); } catch(e) {}
   try { localStorage.setItem(LS, JSON.stringify(p)); } catch(e) {}
   S.portfolio = p;
 }

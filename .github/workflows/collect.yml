@@ -2,7 +2,8 @@ name: Nightly NSE collection
 
 on:
   schedule:
-    - cron: "*/30 3-18 * * 1-5"   # every 30 minutes, 9:00 AM to 12:30 AM IST, Monday to Friday
+    - cron: "*/10 3-11 * * 1-5"   # every 10 minutes in market hours, 8:30 AM to 5:30 PM IST
+    - cron: "*/30 12-18 * * 1-5"  # every 30 minutes in the evening
     - cron: "40 1 * * 2-6"        # 7:10 AM IST next morning, catches anything missed
   workflow_dispatch:
     inputs:
