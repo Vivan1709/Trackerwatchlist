@@ -35,4 +35,16 @@ jobs:
           git diff --cached --quiet && exit 0
           git commit -qm "Background NSE collection, shard ${{ matrix.shard }}"
           for i in 1 2 3 4 5; do git pull -q --rebase -X theirs origin main && git push -q && break; sleep $((RANDOM % 10 + 3)); done
-          gh workflow run pages.yml --ref main || true
+  next:
+    needs: cover
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Keep going until every company is collected, then refresh weekly
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          n=$(ls data/co | wc -l)
+          echo "$n companies collected"
+          if [ "$n" -lt 2300 ]; then gh workflow run coverage.yml --ref main; else sleep 1; fi

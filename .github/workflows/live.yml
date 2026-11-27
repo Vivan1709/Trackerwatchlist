@@ -1,0 +1,44 @@
+name: Live NSE watcher
+# Runs continuously: checks NSE every 4 minutes in market hours (every 25 minutes otherwise),
+# publishes the site every 10 minutes, then restarts itself before GitHub's 6-hour job limit.
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "7 * * * *"   # safety net: restarts the watcher if it ever stops
+permissions:
+  contents: write
+  actions: write
+concurrency:
+  group: live
+  cancel-in-progress: false
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests==2.32.3
+      - name: Watch NSE
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "big-money-tracker-bot"
+          git config user.email "actions@users.noreply.github.com"
+          end=$((SECONDS + 330*60)); last_pub=-1000
+          while [ $SECONDS -lt $end ]; do
+            git pull -q --rebase -X theirs origin main || true
+            timeout 600 python collect.py > /tmp/run.log 2>&1 || true
+            tail -3 /tmp/run.log
+            git add data
+            if ! git diff --cached --quiet; then
+              git commit -qm "Live NSE check $(TZ=Asia/Kolkata date +'%d %b %H:%M')"
+              for i in 1 2 3; do git pull -q --rebase -X theirs origin main && git push -q && break; sleep 5; done
+            fi
+            if [ $((SECONDS - last_pub)) -ge 600 ]; then gh workflow run pages.yml --ref main || true; last_pub=$SECONDS; fi
+            h=$(TZ=Asia/Kolkata date +%-H); d=$(TZ=Asia/Kolkata date +%u)
+            if [ $d -le 5 ] && [ $h -ge 9 ] && [ $h -lt 18 ]; then sleep 240; else sleep 1500; fi
+          done
+          gh workflow run live.yml --ref main
