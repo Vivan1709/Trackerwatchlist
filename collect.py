@@ -549,6 +549,8 @@ def cover(shard: int, shards: int, limit: int) -> int:
             build_co(s, p)
         except Exception as e:
             notes.append(f"{s} failed: {e}")
+    if len(todo) >= limit or time.time() - started > 17 * 60:
+        Path("/tmp/more").write_text("1")   # more companies left: the workflow starts another pass
     print(f"shard {shard}: {len(todo)} to do, notes: {notes[-5:]}")
     return 0
 
