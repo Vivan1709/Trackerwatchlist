@@ -4,32 +4,38 @@
   "INTERARCH",
   "PACEDIGITK",
   "PENIND",
-  "WELCORP"
+  "WELCORP",
+  "ICICIBANK"
  ],
  "items": [
   {
    "s": "HDFCBANK",
-   "q": "HDFC Bank"
+   "q": "HDFC Bank (HDFCBANK)"
   },
   {
    "s": "INTERARCH",
-   "q": "Interarch Building Solutions"
+   "q": "Interarch Building Solutions (INTERARCH)"
   },
   {
    "s": "PACEDIGITK",
-   "q": "Pace Digitek"
+   "q": "Pace Digitek (PACEDIGITK)"
   },
   {
    "s": "PENIND",
-   "q": "Pennar Industries"
+   "q": "Pennar Industries (PENIND)"
   },
   {
    "s": "WELCORP",
-   "q": "Welspun Corp"
+   "q": "Welspun Corp (WELCORP)"
+  },
+  {
+   "s": "ICICIBANK",
+   "q": "ICICIBank"
   }
  ],
  "follows": [
   "Bandhan Mutual Fund",
   "Ashish Kacholia"
- ]
+ ],
+ "updated": "2026-11-27T06:05:50.382Z"
 }
