@@ -250,7 +250,10 @@ def merge_bse(nse: NSE, index: dict, notes: list) -> None:
     for back in range(0, 8):
         d = date.today() - timedelta(days=back)
         try:
-            text = nse.text(f"https://www.bseindia.com/download/BhavCopy/Equity/BhavCopy_BSE_CM_0_0_0_{d:%Y%m%d}_F_0000.CSV")
+            r = requests.get(f"https://www.bseindia.com/download/BhavCopy/Equity/BhavCopy_BSE_CM_0_0_0_{d:%Y%m%d}_F_0000.CSV", timeout=60,
+                             headers={"User-Agent": HEADERS["User-Agent"], "Referer": "https://www.bseindia.com/"})
+            r.raise_for_status()
+            text = r.content.decode("utf-8-sig")
         except Exception:
             continue
         rd = csv.DictReader(io.StringIO(text))
@@ -259,6 +262,9 @@ def merge_bse(nse: NSE, index: dict, notes: list) -> None:
             name_of[str(r.get("FinInstrmId", "")).strip()] = str(r.get("FinInstrmNm", "")).strip()
         if isin_of:
             break
+    if not isin_of:
+        notes.append("BSE merge waiting: BSE price file unavailable")
+        return
     nse_of = load(DATA / "isin.json", {})
     bse_only = {c[0]: c[1] for c in load(DATA / "bse" / "companies.json", [])}
     nse_syms = {c[0] for c in load(DATA / "companies.json", [])}
