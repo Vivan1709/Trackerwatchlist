@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Big Money Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,400..800&family=Instrument+Sans:wdth,wght@75..100,400..700&display=swap" rel="stylesheet">
+<style>
+/* VOICE: a sharp, plain-spoken money desk for one investor
+   IDEA: a tug-of-war board, big money pulling each of your stocks toward buy or sell
+   PICTURE: per-company cards and diverging bars around a centre line, green buy, brick sell
+   COLOUR and TYPE: indigo ink, buy green, sell brick, marigold only for the single largest; condensed grotesque for symbols and figures
+   LAYOUT: start page to add a portfolio, then your companies, then one page per company */
+:root{color-scheme:light dark;
+--ink:light-dark(#1E2257,#E8EAFB);--ink2:light-dark(#4A5080,#B9BEE0);--ink3:light-dark(#6D739B,#8E94BF);
+--paper:light-dark(#F4F6FA,#12153A);--sheet:light-dark(#FFFFFF,#1B1F4D);--rule:light-dark(#DADFEA,#2E3366);--wash:light-dark(#E9ECF4,#262A5C);
+--buy:light-dark(#0E7C5A,#3CC79A);--buysoft:light-dark(#D5EEE5,#16443A);--sell:light-dark(#B83227,#FF7A6B);--sellsoft:light-dark(#F6DCD8,#4A2230);
+--gold:#E8A317;--bar:light-dark(#1E2257,#C7CCF5);
+--display:"Bricolage Grotesque","Arial Narrow",sans-serif;--body:"Instrument Sans",system-ui,sans-serif}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.55 var(--body);font-variant-numeric:tabular-nums;overflow-x:clip}
+a{color:inherit}
+.wrap{max-width:1180px;margin:0 auto;padding:0 max(4vw,16px) 64px}
+h2,h3{font-family:var(--display);letter-spacing:-.01em;margin:0}
+h2{font-size:clamp(1.7rem,3.4vw,2.4rem);font-weight:750;font-stretch:84%;line-height:1.08;margin-bottom:.4rem;text-wrap:balance}
+h3{font-size:1.45rem;font-weight:750;font-stretch:82%;margin:2.6rem 0 .35rem}
+.mast{display:flex;justify-content:space-between;align-items:flex-end;gap:1rem 2rem;flex-wrap:wrap;padding:2rem 0 1.2rem;border-bottom:1px solid var(--rule);margin-bottom:1.8rem}
+.name{font-family:var(--display);font-weight:800;font-stretch:75%;font-size:clamp(2rem,5vw,3rem);line-height:.9;letter-spacing:-.02em;margin:0;text-decoration:none}
+.navl{display:flex;gap:1.6rem;flex-wrap:wrap;align-items:center}
+.navl a{text-decoration:none;font-family:var(--display);font-weight:650;font-stretch:85%;font-size:1.1rem;color:var(--ink3);padding:.5rem 0;border-bottom:3px solid transparent}
+.navl a[aria-current=page]{color:var(--ink);border-color:var(--ink)}
+.status{color:var(--ink3);font-size:.85rem;margin:-1rem 0 1.4rem}
+.status b{color:var(--ink2);font-weight:600}
+:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+.lede{font-family:var(--display);font-size:clamp(1.4rem,2.6vw,2rem);font-weight:600;font-stretch:90%;line-height:1.15;max-width:36ch;margin:.3rem 0 1rem;text-wrap:balance}
+.lede .n{font-weight:800;white-space:nowrap}
+.note{color:var(--ink3);font-size:.92rem;margin:0 0 .9rem;max-width:70ch}
+.pos{color:var(--buy)}.neg{color:var(--sell)}.nw{white-space:nowrap}
+.card{background:var(--sheet);border-radius:18px;padding:.35rem 1.5rem}
+.row{display:grid;gap:1rem;align-items:center;padding:.85rem 0;border-top:1px solid var(--wash)}
+.card>.row:first-child{border-top:0}
+.sym{font-family:var(--display);font-weight:800;font-stretch:75%;letter-spacing:-.01em;line-height:1;overflow-wrap:anywhere}
+.row .sym{font-size:1.15rem}.nm{font-weight:600;line-height:1.25}.sm{color:var(--ink3);font-size:.82rem;margin-top:.15rem}
+.val{text-align:right;font-weight:650;white-space:nowrap}.dt{color:var(--ink3);font-size:.88rem;white-space:nowrap}
+.chip{display:inline-block;font-size:.74rem;font-weight:650;border-radius:999px;padding:.12rem .55rem;margin-top:.3rem}
+.c-fii{background:light-dark(#E1E4FA,#2D3680);color:light-dark(#2C3AA8,#DDE1FF)}
+.c-dii{background:light-dark(#F1E1EE,#5A2A55);color:light-dark(#7E2E6E,#F6D9F0)}
+.c-star{background:var(--gold);color:#1E2257}
+.c-hni{background:light-dark(#FCEFCB,#5A4410);color:light-dark(#7A5300,#FFE7A8)}
+.c-pro{background:light-dark(#E3E6EE,#343A5E);color:light-dark(#46506B,#D5D9EA)}
+.c-oth{color:var(--ink3);border:1px solid var(--rule)}
+.crown{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--gold);margin-left:.4rem;vertical-align:middle}
+.btn{font:650 1rem var(--body);background:var(--ink);color:var(--paper);border:0;border-radius:12px;padding:.75rem 1.3rem;min-height:48px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center}
+.btn.ghost{background:none;color:var(--ink);border:1px solid var(--rule)}
+.btn:disabled{opacity:.5;cursor:default}
+textarea,select,input[type=text]{font:16px var(--body);color:var(--ink);background:var(--sheet);border:1px solid var(--rule);border-radius:12px;padding:.65rem .8rem;min-height:46px;width:100%}
+textarea{min-height:220px;resize:vertical;line-height:1.6}
+.empty{border:2px dashed var(--rule);border-radius:18px;padding:1.6rem 1.8rem;color:var(--ink2);max-width:66ch}
+.empty strong{display:block;font-family:var(--display);font-size:1.25rem;font-stretch:88%;color:var(--ink);margin-bottom:.3rem}
+.msg{font-size:.92rem;margin-top:.6rem;min-height:1.4em}.msg.err{color:var(--sell)}.msg.ok{color:var(--buy)}
+
+/* start page */
+.start{display:grid;grid-template-columns:1.05fr 1fr;gap:clamp(1.5rem,4vw,3.5rem);align-items:start;padding-top:.5rem}
+.start h2{font-size:clamp(2.2rem,5vw,3.6rem);line-height:1;font-stretch:78%}
+.start .intro{font-size:1.1rem;color:var(--ink2);max-width:46ch;margin:.8rem 0 1.4rem}
+.how{display:grid;gap:.9rem;margin-top:1.6rem}
+.how div{display:grid;grid-template-columns:2.2rem 1fr;gap:.8rem;align-items:start;color:var(--ink2)}
+.how b{font-family:var(--display);font-size:1.4rem;font-weight:800;color:var(--ink);line-height:1}
+.panel{background:var(--sheet);border-radius:22px;padding:1.5rem 1.6rem}
+.panel label{font-weight:650;display:block;margin-bottom:.45rem}
+.file{display:block;border:2px dashed var(--rule);border-radius:14px;padding:.9rem 1.1rem;cursor:pointer;color:var(--ink2);margin:.9rem 0}
+.file input{display:block;margin-top:.5rem;font:15px var(--body);color:var(--ink2);max-width:100%}
+.match{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:.4rem 1rem;align-items:center;padding:.6rem 0;border-top:1px solid var(--wash)}
+.match .q{font-weight:600;overflow-wrap:anywhere}
+.match.miss .q{color:var(--sell)}
+.actions{display:flex;gap:.8rem;flex-wrap:wrap;margin-top:1.2rem}
+
+/* portfolio */
+.board .tug{display:grid;grid-template-columns:minmax(110px,1fr) 3fr minmax(100px,.8fr);gap:1.2rem;align-items:center;padding:.9rem 0;border-top:1px solid var(--wash);text-decoration:none}
+.board .tug:first-child{border-top:0}
+.tug .sym{font-size:1.5rem}
+.track{position:relative;height:28px}
+.track::before{content:"";position:absolute;left:50%;top:-6px;bottom:-6px;width:2px;background:var(--ink)}
+.bar{position:absolute;top:4px;height:20px}
+.bar.o{right:50%;background:var(--sell);border-radius:10px 0 0 10px;margin-right:1px;transform-origin:right}
+.bar.i{left:50%;background:var(--buy);border-radius:0 10px 10px 0;margin-left:1px;transform-origin:left}
+.net{text-align:right;font-family:var(--display);font-weight:700;font-stretch:85%;font-size:1.3rem;white-space:nowrap}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:1rem}
+.co{display:block;background:var(--sheet);border-radius:18px;padding:1.1rem 1.25rem;text-decoration:none;border:2px solid transparent}
+.co:hover{border-color:var(--rule)}
+.co .sym{font-size:1.6rem}
+.co .full{color:var(--ink2);font-size:.9rem;margin:.25rem 0 .8rem;min-height:2.6em}
+.co .ln{display:flex;justify-content:space-between;gap:.5rem;font-size:.9rem;padding:.3rem 0;border-top:1px solid var(--wash)}
+.co .ln span:first-child{color:var(--ink3)}
+.co .ln b{font-weight:650;text-align:right;overflow-wrap:anywhere}
+.seg{display:inline-flex;border:1px solid var(--rule);border-radius:10px;overflow:hidden;background:var(--sheet);margin:0 0 1rem}
+.seg button{font:600 .9rem var(--body);color:var(--ink2);background:none;border:0;padding:.55rem 1rem;min-height:42px;cursor:pointer}
+.seg button+button{border-left:1px solid var(--rule)}
+.seg button[aria-pressed=true]{background:var(--ink);color:var(--paper)}
+
+/* company page */
+.filters{display:flex;flex-wrap:wrap;gap:.5rem;margin:1.6rem 0 .2rem;position:sticky;top:0;background:var(--paper);padding:.6rem 0;z-index:2}
+.filters button{font:650 .95rem var(--body);color:var(--ink2);background:var(--sheet);border:1px solid var(--rule);border-radius:999px;padding:.55rem 1.05rem;min-height:44px;cursor:pointer}
+.filters button[aria-pressed=true]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+table.shp tr.top td{font-weight:650;background:var(--wash)}
+table.shp tr.sub td:first-child{padding-left:1.6rem;color:var(--ink2)}
+table.shp{font-size:1rem}
+.price-strip{display:flex;flex-wrap:wrap;gap:1rem 2.5rem;align-items:flex-end;background:var(--sheet);border-radius:18px;padding:1rem 1.4rem;margin:1.4rem 0 .4rem}
+.price-strip b{display:block;font-family:var(--display);font-size:2rem;font-weight:800;font-stretch:80%;line-height:1.05}
+.price-strip .range{min-width:200px;flex:1;max-width:340px}
+.rbar{position:relative;height:6px;background:var(--wash);border-radius:3px;margin:.6rem 0 .3rem}.rbar i{position:absolute;top:-5px;width:4px;height:16px;border-radius:2px;background:var(--ink);transform:translateX(-50%)}
+.rlab{display:flex;justify-content:space-between;font-size:.8rem;color:var(--ink3)}
+.sigs{display:flex;flex-wrap:wrap;gap:.5rem}.sm-sigs{margin-top:.7rem}.sm-sigs .sig{font-size:.78rem;padding:.25rem .6rem}
+.sig{font-size:.9rem;font-weight:600;border-radius:10px;padding:.45rem .8rem;background:var(--sheet);border:1px solid var(--rule)}
+.sig-up{color:var(--buy);border-color:color-mix(in srgb,var(--buy) 40%,transparent);background:var(--buysoft)}
+.sig-down{color:var(--sell);border-color:color-mix(in srgb,var(--sell) 40%,transparent);background:var(--sellsoft)}
+.sig-star{background:var(--gold);color:#1E2257;border-color:var(--gold)}
+.trend{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1rem;margin:.6rem 0 1rem}
+.trend .tr{background:var(--sheet);border-radius:14px;padding:.8rem 1rem}
+.trend .tl{font-weight:650;font-size:.9rem;color:var(--ink2)}.trend svg{width:100%;height:42px;display:block;margin:.3rem 0}
+.trend .tv b{font-family:var(--display);font-size:1.3rem;font-weight:750;font-stretch:85%;display:block}.trend .tv span{font-size:.78rem}
+.fadd{display:flex;gap:.6rem;max-width:560px;margin:1rem 0 .8rem}.fadd input{flex:1}
+.sugg{display:flex;flex-wrap:wrap;gap:.45rem}
+.chipbtn{font:600 .85rem var(--body);color:var(--ink2);background:var(--sheet);border:1px dashed var(--rule);border-radius:999px;padding:.45rem .85rem;min-height:40px;cursor:pointer}
+.chipbtn:hover{border-style:solid;color:var(--ink)}
+.fsec{margin-top:2.2rem;padding-top:.4rem;border-top:1px solid var(--rule)}.fsec h3{margin-top:.6rem}
+.badges{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.7rem}.badges .chip{margin:0}
+.back{display:inline-block;color:var(--ink3);text-decoration:none;font-weight:600;margin-bottom:.8rem;min-height:44px;padding-top:.6rem}
+.cohead{display:flex;justify-content:space-between;align-items:flex-end;gap:1rem 2rem;flex-wrap:wrap}
+.cohead .sym{font-size:clamp(2.6rem,7vw,4.4rem)}
+.cohead .full{font-size:1.15rem;color:var(--ink2);margin-top:.3rem}
+.facts{display:flex;gap:.6rem 2.2rem;flex-wrap:wrap;margin:1.4rem 0 .4rem}
+.fact{min-width:120px}.fact span{display:block;color:var(--ink3);font-size:.85rem}
+.fact b{font-family:var(--display);font-size:1.7rem;font-weight:750;font-stretch:85%;line-height:1.1}
+.split{display:flex;height:16px;border-radius:8px;overflow:hidden;margin:1rem 0 .5rem;background:var(--wash)}
+.split div{height:100%}
+.legend{display:flex;gap:.4rem 1.2rem;flex-wrap:wrap;font-size:.85rem;color:var(--ink2)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:.35rem;vertical-align:middle}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:2.5rem}
+.r-deal{grid-template-columns:5.8rem minmax(0,1fr) 5rem 6.5rem 7rem}
+.price{text-align:right;white-space:nowrap}.price b{font-family:var(--display);font-weight:750;font-stretch:85%;font-size:1.15rem}.price .sm{margin-top:0}
+.tbl{overflow-x:auto;background:var(--sheet);border-radius:18px;padding:.4rem 1rem}
+table{width:100%;border-collapse:collapse;font-size:.92rem}
+th{text-align:left;color:var(--ink3);font-weight:600;padding:.7rem .6rem;border-bottom:1px solid var(--rule);white-space:nowrap}
+td{padding:.6rem;border-bottom:1px solid var(--wash);vertical-align:top}
+td.num,th.num{text-align:right;white-space:nowrap}td.pr{font-family:var(--display);font-weight:750;font-stretch:85%;font-size:1.05rem}
+.r-hold{grid-template-columns:minmax(0,1fr) 9.5rem}
+.r-chg{grid-template-columns:minmax(0,1fr) auto}
+.r-lead{grid-template-columns:1.6rem minmax(0,1fr) 7.5rem}
+.r-big{grid-template-columns:7.5rem minmax(0,1fr) 11rem}
+.tbl a{text-decoration:none}
+.pct{display:grid;grid-template-columns:1fr 3.6rem;gap:.6rem;align-items:center}
+.pct .t{height:8px;background:var(--wash);border-radius:4px;overflow:hidden}.pct .f{height:100%;background:var(--bar);border-radius:4px}
+.pct .n{text-align:right;font-weight:650}
+.tag{font-size:.8rem;font-weight:650;border-radius:6px;padding:.15rem .5rem;white-space:nowrap}
+.tag.new{background:var(--buysoft);color:var(--buy)}.tag.up{color:var(--buy)}.tag.dn{color:var(--sell)}.tag.out{background:var(--sellsoft);color:var(--sell)}
+.side{font-weight:650;font-size:.88rem}
+details{margin-top:.6rem}summary{cursor:pointer;color:var(--ink2);font-weight:600;min-height:44px;display:flex;align-items:center}
+.foot{color:var(--ink3);font-size:.85rem;margin-top:3rem;max-width:75ch}
+.loading{color:var(--ink3);padding:2rem 0}
+@media (max-width:860px){.start,.cols{grid-template-columns:1fr}}
+@media (max-width:640px){
+ .card{padding:.25rem 1rem}.navl{gap:1rem}.navl a{font-size:1rem}.mast{gap:.6rem}
+ .board .tug{grid-template-columns:1fr auto;gap:.4rem 1rem}.board .track{grid-column:1/-1;grid-row:2}
+ .r-deal{grid-template-columns:1fr auto;grid-template-areas:"w v" "w p" "d s";gap:.2rem 1rem}
+ .r-deal .wh{grid-area:w}.r-deal .val{grid-area:v}.r-deal .dt{grid-area:d}.r-deal .side{grid-area:s;text-align:right}.r-deal .price{grid-area:p}
+ table{font-size:13px}.stack thead{display:none}.stack tr{display:grid;padding-block:10px;border-bottom:1px solid var(--wash)}
+ .stack td{display:flow-root;border:0;padding:3px 0;padding-inline-start:6.5rem;text-align:start}
+ .stack td.num,.stack td.pr{text-align:start}
+ .trend{grid-template-columns:repeat(2,minmax(0,1fr))}
+ table.shp th.old,table.shp td.old{display:none}
+ table.shp{font-size:13px}table.shp td,table.shp th{padding:.5rem .35rem}table.shp tr.sub td:first-child{padding-left:.8rem}
+ .tbl{padding:.3rem .5rem}
+ .navl{gap:.4rem 1rem}
+ .stack td::before{content:attr(data-l);float:inline-start;width:6rem;margin-inline-start:-6.5rem;text-align:start;color:var(--ink3);font:500 13px var(--body)}
+ .r-hold{grid-template-columns:1fr}.r-big{grid-template-columns:1fr}
+ .match{grid-template-columns:1fr}
+}
+@media (prefers-reduced-motion:no-preference){.bar{animation:grow .7s cubic-bezier(.2,.7,.2,1) both}@keyframes grow{from{transform:scaleX(0)}}}
+table.bbg td,table.bbg th{padding:.55rem .7rem}table.bbg tbody tr:nth-child(even){background:rgba(30,34,87,.04)}#mh{margin-top:1rem}#mh .btn{margin:.6rem 0}
+.acct{display:flex;gap:.8rem;align-items:center;font-size:.92rem;color:var(--mute,#5b6079);margin-top:.6rem}.acct button{font:inherit;background:none;border:0;color:var(--ink);text-decoration:underline;cursor:pointer;padding:.3rem}
+.login{max-width:420px;margin:1.5rem auto}.login h2{margin:.2rem 0 .4rem}.login input{width:100%;box-sizing:border-box;font:inherit;padding:.75rem .9rem;border:1.5px solid rgba(30,34,87,.2);border-radius:12px;margin:.25rem 0 .8rem;background:#fff}
+.login label{font-weight:600;font-size:.92rem}.login .btn{width:100%;justify-content:center;margin-top:.3rem}.login .alt{display:flex;justify-content:space-between;margin-top:1rem;font-size:.92rem}.login .alt button{background:none;border:0;color:var(--ink);text-decoration:underline;cursor:pointer;font:inherit;padding:.3rem 0}
+.login .or{text-align:center;margin:1rem 0 .6rem;font-size:.88rem;opacity:.7}.btn.google{background:#fff;color:var(--ink);border:1.5px solid rgba(30,34,87,.25)}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="mast">
+  <a class="name" href="#home">Big Money Tracker</a>
+  <nav class="navl" aria-label="Sections"><a href="#portfolio" data-r="portfolio">Your companies</a><a href="#follow" data-r="follow">Investors you follow</a><a href="#market" data-r="market">Latest NSE deals</a><a href="#home" data-r="home">Edit portfolio</a></nav>
+  <div class="acct" id="acct" hidden></div>
+</header>
+<p class="status" id="status">Connecting…</p>
+<main id="view"><p class="loading">Loading…</p></main>
+<p class="foot">Data comes from NSE: daily bulk and block deals (trades of 0.5% or more of a company), insider trades by promoters and directors (SEBI PIT disclosures), large-stake filings (SEBI SAST: crossing 5% or moving 2% or more), and each company's quarterly shareholding filing (every holder with 1% or more). It is checked automatically every 30 minutes on weekdays and appears here within about an hour of NSE publishing it. Trading firms that buy and sell the same stock on the same day are left out. Not investment advice.</p>
+</div>
+
+<script src="account-config.js" onerror="window.FIREBASE_CONFIG=null"></script>
+<script>
+{
+const HFT = ["GRAVITON","HRTI","TOWER RESEARCH","ALPHAGREP","MICROCURVES","JUNOMONETA","QE SECURITIES","IRAGE","NK SECURITIES","SILVERLEAF","PACE STOCK","ELIXIR WEALTH","MANSI SHARE","JUMP TRADING","CITADEL SECURITIES","DOLAT","SHARE INDIA","OPTIVER","HUDSON RIVER","VIRTU","ESTEE ADVISORS","MUSIGMA","PRIMUS","RIGEL"];
+const TAGS = [["LIFE INSURANCE CORPORATION","DII - Insurance"],["LIC OF INDIA","DII - Insurance"],["GOVERNMENT OF SINGAPORE","FII"],["MONETARY AUTHORITY OF SINGAPORE","FII"],["ABU DHABI INVESTMENT AUTHORITY","FII"],["NORGES BANK","FII"],["GOLDMAN SACHS","FII"],["MORGAN STANLEY","FII"],["SOCIETE GENERALE","FII"],["BNP PARIBAS","FII"],["CITIGROUP GLOBAL","FII"],["NOMURA","FII"],["VANGUARD","FII"],["BOFA SECURITIES","FII"],["ASHISH KACHOLIA","HNI"],["BENGAL FINANCE","HNI"],["VIJAY KISHANLAL KEDIA","HNI"],["MUKUL MAHAVIR AGRAWAL","HNI"],["RADHAKISHAN DAMANI","HNI"],["DERIVE TRADING","HNI"],["REKHA JHUNJHUNWALA","HNI"],["RARE ENTERPRISES","HNI"],["DOLLY KHANNA","HNI"],["SUNIL SINGHANIA","HNI"],["ABAKKUS","HNI"],["MADHURI MADHUSUDAN KELA","HNI"],["SINGULARITY","HNI"]];
+const SUPERSTARS = ["RAKESH JHUNJHUNWALA","REKHA JHUNJHUNWALA","RARE ENTERPRISES","RARE EQUITY","RADHAKISHAN DAMANI","DERIVE TRADING","BRIGHT STAR INVESTMENTS","ASHISH KACHOLIA","BENGAL FINANCE","SURYAVANSHI COMMOTRADE","VIJAY KISHANLAL KEDIA","KEDIA SECURITIES","MUKUL MAHAVIR AGRAWAL","PARAM CAPITAL","DOLLY KHANNA","SUNIL SINGHANIA","ABAKKUS","PORINJU","EQUITY INTELLIGENCE","MADHURI MADHUSUDAN KELA","MADHUSUDAN KELA","SINGULARITY","ASHISH DHAWAN","VALLABH ROOPCHAND BHANSHALI","VALLABH BHANSHALI","NEMISH SHAH","AKASH BHANSHALI","ANIL KUMAR GOEL","RAMESH DAMANI","MOHNISH PABRAI","DALAL STREET LLC","SATPAL KHATTAR","SEETHA KUMARI","AJAY UPADHYAYA","ANUJ ANANTRAI SHETH","BASANT MAHESHWARI","AASHISH KACHOLIA","HITESH RAMJI JAVERI","DOLLY RAJIV KHANNA"];
+const CORP = /\b(LIMITED|LTD|LLP|LLC|PTE|PLC|INC|FUND|FUNDS|TRUST|BANK|CAPITAL|SECURITIES|PVT|PRIVATE|INVESTMENTS?|SERVICES|ADVISORS?|PARTNERS|VENTURES|HOLDINGS?|FINANCE|FINANCIAL|INDUSTRIES|ENTERPRISES?|CORPORATION|AUTHORITY|GOVERNMENT|INSURANCE|MARKETS?|BROKING|STOCK|SHARES?|CO|COMPANY|ASSET|MANAGEMENT|GLOBAL|INDIA|SA|AG|NV|BV|GMBH|SCHEME|PORTFOLIO|AMC|ETF|UTI|SICAV|OPPORTUNITIES|MASTER|EQUITY|TRADING|COMMODITIES|AND)\b/;
+const KEEP = new Set("LLC LLP LP PLC SICAV MF AMC HDFC ICICI SBI UTI LIC HSBC BNP UBS DSP IDFC HUF FPI ETF PSU ADIA GIC II III BOFA".split(" "));
+const DAY = 864e5;
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const today = () => { const d = new Date(); d.setHours(0,0,0,0); return d; };
+const pd = s => { const m = String(s||"").match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? new Date(+m[1], m[2]-1, +m[3]) : null; };
+const fmtD = (d, y) => d.toLocaleDateString("en-IN", y ? {day:"2-digit",month:"short",year:"numeric"} : {day:"2-digit",month:"short"});
+const fmtQ = s => { const d = pd(s); return d ? d.toLocaleDateString("en-IN",{month:"short",year:"numeric"}) : esc(s); };
+function cr(x, sign){ if (Math.abs(x) < .0005) return "Rs 0";
+  if (Math.abs(x) < 1) { const l = Math.abs(x) * 100; return (sign ? (x > 0 ? "+" : "-") : (x < 0 ? "-" : "")) + "Rs " + (l >= 10 ? Math.round(l) : l.toFixed(1)) + " L"; } const a = Math.abs(x), s = a >= 100 ? Math.round(a).toLocaleString("en-IN") : a.toFixed(1);
+  return (sign ? (x > 0 ? "+" : "-") : (x < 0 ? "-" : "")) + "Rs " + s + " Cr"; }
+const GROUPS = [["all","All investors"],["fii","FII"],["dii","DII"],["uhni","UHNI & superstars"],["pro","Promoters & insiders"],["oth","Others"]];
+const groupOf = c => c.startsWith("FII") ? "fii" : c.startsWith("DII") ? "dii" : (c === "Superstar" || c.startsWith("HNI")) ? "uhni" : (c === "Promoter" || c === "Insider") ? "pro" : "oth";
+const short = (n, k=40) => { const t = String(n).toUpperCase().split(/\s+/).map(w => KEEP.has(w.replace(/[().,-]/g,"")) ? w : w.charAt(0) + w.slice(1).toLowerCase()).join(" "); return t.length <= k ? t : t.slice(0,k-1).trimEnd() + "…"; };
+const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+const sum = (a, f) => a.reduce((t, x) => t + f(x), 0);
+function groupBy(a, f){ const m = new Map(); for (const x of a){ const k = f(x); if (!m.has(k)) m.set(k, []); m.get(k).push(x); } return m; }
+
+const AMCS = ["HDFC","ICICI PRUDENTIAL","SBI","NIPPON INDIA","KOTAK","AXIS","ADITYA BIRLA SUN LIFE","UTI","DSP","MIRAE ASSET","TATA","FRANKLIN INDIA","FRANKLIN TEMPLETON","INVESCO INDIA","BANDHAN","QUANT","MOTILAL OSWAL","PARAG PARIKH","PPFAS","EDELWEISS","CANARA ROBECO","WHITEOAK","HSBC","SUNDARAM","BARODA BNP","LIC MUTUAL","UNION","NAVI","360 ONE","HELIOS","ITI","JM FINANCIAL","MAHINDRA MANULIFE","BAJAJ FINSERV","SAMCO","TRUST MUTUAL","OLD BRIDGE","GROWW","ZERODHA","SHRIRAM","QUANTUM","IDBI","PGIM INDIA MUTUAL"];
+const FOREIGN = /\b(INC|PCC|SICAV|PTE|LLC|L\.?P|PLC|S\.?A|SE|AG|NV|BV|GMBH|IFSC|MAURITIUS|SINGAPORE|CAYMAN|LUXEMBOURG|IRELAND|EUROPE|NORGES|KUWAIT|ABU DHABI|QATAR|SAUDI|GOVERNMENT PENSION|GOVRNMNT PENSION|MTBJ|SOVEREIGN|OFFSHORE|INTERNATIONAL FUND|GLOBAL FUND|CAPITAL GROUP|EUROPACIFIC|EURO PACIFIC|AMERICAN FUNDS|ABERDEEN|SCHRODERS?|FIDELITY|BLACKROCK|JPMORGAN|J P MORGAN|T\.? ?ROWE|WELLINGTON|ISHARES|VANECK|EMERGING MARKETS?|ASIAN?|PACIFIC|WORLD FUND|INDIA FUND INC|COMMON TRUST|INVESTMENT TRUST)\b|\((US|LUX|UK)\)/;
+function categorize(name, group = ""){
+  const n = String(name).toUpperCase().replace(/\s+/g, " "), g = group;
+  if (SUPERSTARS.some(p => n.includes(p))) return "Superstar";
+  for (const [p,c] of TAGS) if (n.includes(p) && c !== "HNI") return c;
+  if (/^(OthersIndianShareholders|OtherForeignShareholders|IndividualsOrHinduUndividedFamily.*|IndividualsOrHUF.*|.*Promoter.*)$/.test(g)) return "Promoter";
+  if (/MutualFund/i.test(g)) return "DII - Mutual Fund";
+  if (/Insurance/i.test(g)) return "DII - Insurance";
+  if (/Foreign|FPI|Sovereign/i.test(g)) return "FII";
+  if (/Bank|Provident|Pension|AlternativeInvestment|FinancialInstitution|NBFC|InstitutionsDomestic/i.test(g)) return "DII - Other";
+  if (/Individual|NonResident/i.test(g)) return "HNI / Individual";
+  if (/BodiesCorporate/i.test(g)) return "Other";
+  // no filing group (deal and filing names): judge by the name
+  if (FOREIGN.test(n)) return "FII";
+  if (n.includes("MUTUAL FUND") || / MF\b/.test(n) || ((/FUND|SCHEME|UNIT TRUST|\bEF\b/.test(n)) && AMCS.some(a => n.startsWith(a)))) return "DII - Mutual Fund";
+  if (/INSURANCE|ASSURANCE|\bLIFE\b/.test(n)) return "DII - Insurance";
+  if (/\bAIF\b|ALTERNATIVE INVESTMENT|\bSERIES\b|\bSCHEME\b|\bTRUSTEE\b|PROVIDENT|PENSION/.test(n)) return "DII - Other";
+  if (/\bFUNDS?\b/.test(n)) return "FII";   // a fund outside the Indian fund houses and AIFs is almost always a foreign portfolio investor
+  if (n.endsWith(" HUF") || (!CORP.test(n) && n.split(" ").length >= 2 && n.split(" ").length <= 5)) return "HNI / Individual";
+  return "Other";
+}
+function chip(c){
+  const cls = c.startsWith("FII") ? "c-fii" : c.startsWith("DII") ? "c-dii" : (c.startsWith("HNI") || c === "Superstar") ? "c-hni" : (c === "Promoter" || c === "Insider") ? "c-pro" : "c-oth";
+  const lab = {"DII - Mutual Fund":"DII, mutual fund","DII - Insurance":"DII, insurer","DII - Other":"DII","HNI / Individual":"UHNI, individual","Superstar":"Superstar investor","FII":"FII"}[c] || c;
+  return `<span class="chip ${c === "Superstar" ? "c-star" : cls}">${esc(lab)}</span>`;
+}
+
+// ---------------- data layer: shared database, with this browser as a fallback for the portfolio
+let db = null, dbState = "waiting";
+const LS = "bmt-portfolio";
+const S = {companies:null, portfolio:null, meta:null, days:new Map(), holders:new Map(), txns:new Map(), corp:new Map(), prices:{}, draft:null, period:30, filter:"all"};
+const docData = r => r == null ? null : (typeof r.data === "function" ? r.data() : (r.exists === false ? null : (r.data !== undefined ? r.data : r)));
+const dbErrors = [];
+async function getDoc(path){ if (!db) return null;
+  try { const ref = typeof db.doc === "function" ? db.doc(path) : null; const r = ref ? await ref.get() : await db.get(path); return docData(r); }
+  catch(e) { dbErrors.push(path + ": " + (e?.message || e)); return null; } }
+async function setDoc(path, data){ if (db) await db.doc(path).set(data); }
+// outside Claude (own hosting), the same documents come from the site's own server
+const httpDb = () => {
+  try { const k = new URLSearchParams(location.search).get("k"); if (k) { localStorage.setItem("bmt-key", k); history.replaceState(null, "", location.pathname + location.hash); } } catch(e) {}
+  return {doc: p => ({
+    get: async () => { const r = await fetch("/api/doc?path=" + encodeURIComponent(p), {cache:"no-store"}); const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status); return j; },
+    set: async d => { let k = ""; try { k = localStorage.getItem("bmt-key") || ""; } catch(e) {}
+      const r = await fetch("/api/doc?path=" + encodeURIComponent(p), {method:"POST", headers:{"content-type":"application/json", "x-key":k}, body:JSON.stringify(d)}); const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status); return j; } })};
+};
+// on GitHub Pages the data files sit next to the page; changes to the portfolio go through a GitHub issue that starts the NSE fetch
+const REPO = "Vivan1709/Trackerwatchlist";
+const fileOf = p => p === "portfolio/main" ? "portfolio.json" : p === "meta/index" ? "data/index.json" : p === "meta/prices" ? "data/prices.json" : "data/" + p + ".json";
+const coCache = new Map();
+const coFile = s => { if (!coCache.has(s)) coCache.set(s, fetch("data/co/" + s + ".json?t=" + Math.floor(Date.now() / 60000), {cache:"no-store"}).then(r => r.ok ? r.json() : null).catch(() => null).then(co => {
+    if (!co) { coCache.delete(s); return null; }
+    if (co.p && !S.prices[s]) S.prices[s] = co.p;
+    for (const [day, ...row] of co.d || []) { const v = S.days.get(day) || {rows: []}; const k = JSON.stringify(row);
+      if (!v.rows.some(r => JSON.stringify(r) === k)) v.rows.push(row); S.days.set(day, v); }
+    return co; })); return coCache.get(s); };
+const PAGES = /github\.io$/.test(location.hostname) || /[?&]pages=1/.test(location.search);
+const pagesDb = () => ({doc: p => ({
+  get: async () => {
+    const m = p.match(/^(holders|txns|corp)\/(.+)$/);
+    if (m) { const co = await coFile(m[2]); if (!co) return {exists:false, data:null};
+      return {exists:true, data: m[1] === "holders" ? {q: co.h || []} : m[1] === "txns" ? {rows: co.t || []} : co.c || {}}; }
+    const r = await fetch(fileOf(p) + "?t=" + Date.now(), {cache:"no-store"}); if (r.status === 404) return {exists:false, data:null};
+    if (!r.ok) throw new Error("HTTP " + r.status); let d = await r.json();
+    if (p === "meta/prices") d = {p:d};
+    if (p === "portfolio/main") { let local = null; try { local = JSON.parse(localStorage.getItem("bmt-portfolio")); } catch(e) {}
+      if (!d.items) d = {items:(d.symbols || []).map(s => ({s, q:s})), follows:[]};
+      if (local?.updated && (!d.updated || local.updated > d.updated)) d = local; }
+    return {exists:true, data:d}; },
+  set: async d => {} })});   // the portfolio lives in this browser; every NSE company is already collected
+const fetchNowUrl = s => `https://github.com/${REPO}/issues/new?title=${encodeURIComponent("Portfolio update: add " + s)}&body=${encodeURIComponent("Fetch this company from NSE now.\n\n```json\n" + JSON.stringify({items:S.portfolio?.items || [], follows:follows(), updated:new Date().toISOString()}) + "\n```")}`;
+const timeout = (p, ms) => Promise.race([p, new Promise(r => setTimeout(() => r(null), ms))]);
+
+// ---------------- accounts: sign in so your portfolio follows you to every device (Firebase, free)
+const AUTH = {on:false, user:null, fb:null};
+async function startAccounts(){
+  if (!PAGES || !window.FIREBASE_CONFIG) return;
+  const v = "10.12.2";
+  const [app, auth, fs] = await Promise.all([import(`https://www.gstatic.com/firebasejs/${v}/firebase-app.js`), import(`https://www.gstatic.com/firebasejs/${v}/firebase-auth.js`), import(`https://www.gstatic.com/firebasejs/${v}/firebase-firestore.js`)]);
+  const a = app.initializeApp(window.FIREBASE_CONFIG);
+  AUTH.fb = {auth, fs, A: auth.getAuth(a), D: fs.getFirestore(a)};
+  AUTH.on = true;
+  AUTH.user = await new Promise(res => { const off = auth.onAuthStateChanged(AUTH.fb.A, u => { off(); res(u); }); });
+}
+async function loadAccountPortfolio(){
+  const {fs, D} = AUTH.fb, ref = fs.doc(D, "users", AUTH.user.uid), snap = await fs.getDoc(ref);
+  if (snap.exists() && snap.data().items) return snap.data();
+  let local = null; try { local = JSON.parse(localStorage.getItem(LS)); } catch(e) {}
+  const start = local?.items?.length ? local : (S.portfolio?.items?.length ? S.portfolio : {items:[], follows:[]});
+  const p = {items:start.items || [], follows:start.follows || [], updated:new Date().toISOString(), email:AUTH.user.email || ""};
+  await fs.setDoc(ref, p); return p;
+}
+async function saveAccountPortfolio(p){ if (AUTH.on && AUTH.user) await AUTH.fb.fs.setDoc(AUTH.fb.fs.doc(AUTH.fb.D, "users", AUTH.user.uid), {...p, email:AUTH.user.email || ""}); }
+function acctBar(){
+  const el = document.getElementById("acct"); if (!AUTH.on || !AUTH.user) { el.hidden = true; return; }
+  el.hidden = false; el.innerHTML = `<span>Signed in as <b>${esc(AUTH.user.email || AUTH.user.displayName || "you")}</b></span><button id="signout">Sign out</button>`;
+  document.getElementById("signout").onclick = async () => { await AUTH.fb.auth.signOut(AUTH.fb.A); try { localStorage.removeItem(LS); } catch(e) {} location.hash = ""; location.reload(); };
+}
+const AUTH_ERR = c => ({"auth/invalid-credential":"Wrong email or password.","auth/wrong-password":"Wrong email or password.","auth/user-not-found":"No account with that email. Create one below.","auth/email-already-in-use":"That email already has an account. Sign in instead.","auth/weak-password":"Use at least 6 characters for the password.","auth/invalid-email":"That email address doesn't look right.","auth/popup-closed-by-user":"Google sign-in was closed before it finished.","auth/too-many-requests":"Too many tries. Wait a minute and try again."}[c] || "Couldn't sign in (" + c + ").");
+function renderLogin(mode = "in"){
+  document.querySelectorAll(".navl").forEach(n => n.hidden = true);
+  view.innerHTML = `<section class="login panel"><h2>${mode === "in" ? "Sign in" : "Create your account"}</h2>
+    <p class="note">${mode === "in" ? "Your portfolio and the investors you follow are saved to your account, on every device." : "Free. Your portfolio is saved to your account so it's there on your phone and computer."}</p>
+    <button class="btn google" id="g">Continue with Google</button><div class="or">or with email</div>
+    <form id="f"><label for="em">Email</label><input id="em" type="email" autocomplete="email" required>
+    <label for="pw">Password</label><input id="pw" type="password" autocomplete="${mode === "in" ? "current-password" : "new-password"}" minlength="6" required>
+    <button class="btn" type="submit">${mode === "in" ? "Sign in" : "Create account"}</button></form><p class="msg" id="lm"></p>
+    <div class="alt"><button id="sw">${mode === "in" ? "New here? Create an account" : "Have an account? Sign in"}</button>${mode === "in" ? `<button id="fp">Forgot password</button>` : ""}</div></section>`;
+  const {auth, A} = AUTH.fb, m = document.getElementById("lm"), done = u => { AUTH.user = u; document.querySelectorAll(".navl").forEach(n => n.hidden = false); afterLogin(); };
+  const fail = e => { m.textContent = AUTH_ERR(e.code || e.message); m.className = "msg err"; };
+  document.getElementById("sw").onclick = () => renderLogin(mode === "in" ? "up" : "in");
+  document.getElementById("g").onclick = () => auth.signInWithPopup(A, new auth.GoogleAuthProvider()).then(r => done(r.user)).catch(fail);
+  document.getElementById("f").onsubmit = e => { e.preventDefault(); const em = document.getElementById("em").value.trim(), pw = document.getElementById("pw").value;
+    m.textContent = "…"; m.className = "msg";
+    (mode === "in" ? auth.signInWithEmailAndPassword(A, em, pw) : auth.createUserWithEmailAndPassword(A, em, pw)).then(r => done(r.user)).catch(fail); };
+  const fp = document.getElementById("fp"); if (fp) fp.onclick = () => { const em = document.getElementById("em").value.trim();
+    if (!em) { m.textContent = "Type your email above first."; m.className = "msg err"; return; }
+    auth.sendPasswordResetEmail(A, em).then(() => { m.textContent = "Password reset email sent to " + em + "."; m.className = "msg ok"; }).catch(fail); };
+}
+async function afterLogin(){
+  view.innerHTML = `<p class="loading">Loading your portfolio…</p>`;
+  S.portfolio = await loadAccountPortfolio();
+  try { localStorage.setItem(LS, JSON.stringify(S.portfolio)); } catch(e) {}
+  acctBar();
+  location.hash = S.portfolio?.items?.length ? "portfolio" : "home"; route();
+}
+
+async function boot(){
+  const [c, d] = await Promise.all([fetch("companies.json").then(r => r.json()).catch(() => []), window.claude?.use ? timeout(window.claude.use("db"), 10000) : Promise.resolve(PAGES ? pagesDb() : location.protocol.startsWith("http") && !/claude|localhost|127\.0\.0\.1/.test(location.hostname) ? httpDb() : null)]);
+  S.companies = c; db = d; dbState = db ? "on" : "off";
+  if (PAGES) { try { const b = await fetch("data/bse/companies.json", {cache:"no-store"}).then(r => r.ok ? r.json() : []); const have = new Set(c.map(x => x[0])); S.companies = c.concat(b.filter(x => !have.has(x[0])).map(([s, n]) => [s, n + " (BSE)"])); } catch(e) {} }
+  if (db) {
+    S.portfolio = await getDoc("portfolio/main");
+    S.meta = await getDoc("meta/index");
+    S.prices = (await getDoc("meta/prices"))?.p || {};
+  }
+  if (!S.portfolio) { try { S.portfolio = JSON.parse(localStorage.getItem(LS)); } catch(e) {} }
+  await loadDays();
+  try { await startAccounts(); } catch(e) { console.warn("accounts unavailable", e); AUTH.on = false; }
+  if (AUTH.on && !AUTH.user) { renderLogin(); return; }
+  if (AUTH.on) return afterLogin();
+  if (!location.hash) location.hash = S.portfolio?.items?.length ? "portfolio" : "home";
+  route();
+}
+// keep an open page current: look for a new NSE check every 2 minutes and redraw when there is one
+setInterval(async () => {
+  if (!db || document.hidden) return;
+  const m = await getDoc("meta/index"); if (!m?.lastRun || m.lastRun === S.meta?.lastRun) return;
+  S.meta = m; coCache.clear(); S.holders.clear(); S.txns.clear(); S.corp.clear();
+  S.prices = (await getDoc("meta/prices"))?.p || S.prices; await loadDays();
+  if (!/^#(home)?$/.test(location.hash) && !(AUTH.on && !AUTH.user)) route();
+}, 120000);
+async function loadDays(){
+  try { const seed = await (await fetch("seed.json")).json(); for (const [d, v] of Object.entries(seed)) if (!S.days.has(d)) S.days.set(d, v); } catch(e) {}
+  const dates = (S.meta?.days || []).slice().sort().reverse().slice(0, 120);
+  await Promise.all(dates.map(async d => { const v = await getDoc("days/" + d); if (v?.rows) S.days.set(d, v); }));
+}
+let pollT = null;
+function waitFor(s, again){
+  clearTimeout(pollT);
+  pollT = setTimeout(async () => {
+    S.holders.delete(s); S.txns.delete(s); S.corp.delete(s); coCache.delete(s);
+    S.meta = await getDoc("meta/index") || S.meta; S.prices = (await getDoc("meta/prices"))?.p || S.prices;
+    await loadDays(); again();
+  }, 20000);
+}
+async function loadHolders(syms){
+  await Promise.all(syms.filter(s => !S.holders.has(s)).map(async s => { S.holders.set(s, await getDoc("holders/" + s)); }));
+}
+async function loadTxns(syms){
+  await Promise.all(syms.filter(s => !S.txns.has(s)).map(async s => { S.txns.set(s, await getDoc("txns/" + s)); }));
+}
+const sideOf = s => /^\s*(buy|acqui|purchase|market purchase)/i.test(s) ? "BUY" : /^\s*(sell|sale|dispos|market sale)/i.test(s) ? "SELL" : "OTHER";
+// every transaction for a set of companies: bulk/block deals + insider + large-stake filings, newest first
+async function loadCorp(syms){
+  await Promise.all(syms.filter(s => !S.corp.has(s)).map(async s => { S.corp.set(s, await getDoc("corp/" + s)); }));
+}
+function transactions(syms){
+  const set = new Set(syms), out = [];
+  const prom = new Map(syms.map(s => [s, new Set([...(S.holders.get(s)?.q?.[0]?.rows || []).filter(([n, p, g]) => categorize(n, g) === "Promoter").map(r => norm(r[0])),
+    ...(S.txns.get(s)?.rows || []).filter(r => r.cat === "Y" || /promoter/i.test(r.cat)).map(r => norm(r.who))])]));
+  for (const x of allDeals()) if (set.has(x.s)) out.push({d:x.d, s:x.s, who:x.c, cat: prom.get(x.s).has(norm(x.c)) ? "Promoter" : x.cat, src:x.ty + " deal", side:x.side, act:x.side === "BUY" ? "Bought" : "Sold", qty:x.q, price:x.p, value:x.v, after:null});
+  for (const s of syms) for (const r of (S.txns.get(s)?.rows || [])) {
+    const d = pd(r.date); if (!d) continue;
+    const side = sideOf(r.type || r.mode), qty = +r.qty || null, price = +r.price || null;
+    const act = side === "BUY" ? "Bought" : side === "SELL" ? "Sold" : (String(r.type || r.mode || "Other").replace(/\s+/g, " ").trim() || "Other");
+    out.push({d, s, who:String(r.who).toUpperCase(), cat: (/promoter/i.test(r.cat) || r.cat === "Y") ? "Promoter" : /director|kmp|key managerial|designated|relative|employee/i.test(r.cat) ? "Insider" : categorize(r.who),
+      src: r.src === "SAST" ? "Large stake" : "Insider trade", side, act, qty, price, value: r.value ? +r.value / 1e7 : (qty && price ? qty * price / 1e7 : null), after: r.after != null && r.after !== "" ? +r.after : null, role:r.cat || ""});
+  }
+  return out.sort((a, b) => b.d - a.d || (b.value || 0) - (a.value || 0));
+}
+function txnRows(list, showSym = true){
+  const vs = x => { const now = livePrice(x.s); if (!now || !x.price) return "–"; const r = (now / x.price - 1) * 100; return `<span class="${r > 0 ? "pos" : r < 0 ? "neg" : ""}">${r > 0 ? "+" : ""}${r.toFixed(1)}%</span>`; };
+  return `<div class="tbl"><table class="stack"><thead><tr><th>Date</th>${showSym ? "<th>Company</th>" : ""}<th>Who</th><th>What</th><th class="num">Shares</th><th class="num">Price</th><th class="num">Today vs deal</th><th class="num">Value</th><th class="num">Stake after</th></tr></thead><tbody>` +
+    list.map(x => `<tr><td data-l="Date" class="nw">${fmtD(x.d, true)}</td>${showSym ? `<td data-l="Company">${(S.portfolio?.items || []).some(i => i.s === x.s) ? `<a href="#c-${slug(x.s)}"><b>${esc(x.s)}</b></a>` : `<b>${esc(x.s)}</b>`}</td>` : ""}
+      <td data-l="Who">${esc(short(x.who, 38))}<br>${chip(x.cat)}${x.role && x.role.length > 2 && x.cat !== "Promoter" ? `<span class="sm"> ${esc(x.role)}</span>` : ""}</td>
+      <td data-l="What"><b class="${x.side === "BUY" ? "pos" : x.side === "SELL" ? "neg" : ""}">${esc(x.act)}</b><div class="sm">${esc(x.src)}</div></td>
+      <td data-l="Shares" class="num">${x.qty ? Math.round(x.qty).toLocaleString("en-IN") : "–"}</td>
+      <td data-l="Price" class="num pr">${x.price ? "Rs " + x.price.toLocaleString("en-IN",{maximumFractionDigits:2}) : `<span class="sm">${x.src === "Large stake" ? "Not disclosed" : "–"}</span>`}</td>
+      <td data-l="Today vs deal" class="num">${vs(x)}</td>
+      <td data-l="Value" class="num">${x.value ? cr(x.value) : `<span class="sm">${x.src === "Large stake" ? "Not disclosed" : "–"}</span>`}</td>
+      <td data-l="Stake after" class="num">${x.after != null && !isNaN(x.after) ? x.after.toFixed(2) + "%" : "–"}</td></tr>`).join("") + `</tbody></table></div>`;
+}
+function allDeals(){
+  const out = [];
+  for (const [d, v] of S.days) { const dt = pd(d); for (const r of v.rows || []) {
+    const [s, co, c, side, q, p, ty] = r; const C = String(c).toUpperCase();
+    if (HFT.some(h => C.includes(h))) continue;
+    out.push({d:dt, s, co, c:C, side: side === "B" ? "BUY" : "SELL", q:+q, p:+p, v:q*p/1e7, ty: {K:"Block", U:"Bulk", BK:"BSE block", BU:"BSE bulk"}[ty] || "Bulk", cat:categorize(C)}); } }
+  // NSE lists a trade that is both a block deal and 0.5%+ of the company in both reports: keep it once, as the block deal
+  const bk = x => [+x.d, x.s, x.c, x.side, x.q, x.p].join("|");
+  const isBlock = x => /lock$/.test(x.ty);
+  const blocks = new Set(out.filter(isBlock).map(bk));
+  const uniq = out.filter(x => isBlock(x) || !blocks.has(bk(x)));
+  const sides = new Map(); for (const x of uniq){ const k = +x.d + "|" + x.s + "|" + x.c; sides.set(k, (sides.get(k) || new Set()).add(x.side)); }
+  return uniq.filter(x => sides.get(+x.d + "|" + x.s + "|" + x.c).size < 2);
+}
+const signed = x => x.side === "BUY" ? x.v : -x.v;
+function statusLine(){
+  const el = document.getElementById("status");
+  if (dbState === "off") { el.innerHTML = `Showing NSE deals up to ${S.days.size ? esc([...S.days.keys()].sort().at(-1)) : "the latest day"}. Live nightly updates appear when this page is opened signed in to Claude; your portfolio is saved in this browser for now.`; return; }
+  const m = S.meta;
+  if (dbErrors.length && !m) { el.innerHTML = "Showing the bundled latest NSE day. The live database didn't answer: " + esc(dbErrors[0]); return; }
+  el.innerHTML = m?.lastRun ? `Last collected from NSE <b>${esc(new Date(m.lastRun).toLocaleString("en-IN",{day:"2-digit",month:"short",hour:"numeric",minute:"2-digit"}))}</b>. Deals from <b>${S.days.size}</b> trading day${S.days.size === 1 ? "" : "s"}. NSE is checked every 10 minutes in market hours and this page updates itself.`
+    : "Waiting for the first nightly collection from NSE.";
+}
+
+// ---------------- name matching
+const norm = s => String(s).toUpperCase().replace(/&/g," AND ").replace(/\b(LIMITED|LTD|THE|INDIA|OF|CO|CORPORATION|CORP|INDUSTRIES|IND)\b/g," ").replace(/[^A-Z0-9 ]/g," ").replace(/\s+/g," ").trim();
+let IDX = null;
+function matchName(q){
+  if (!IDX) IDX = S.companies.map(([s, n]) => ({s, n, k:norm(n), sk:s.toUpperCase()}));
+  const Q = String(q).trim(); if (!Q) return [];
+  const tagged = Q.match(/\(([A-Z0-9&\-]+)\)\s*$/); if (tagged) { const hit = IDX.find(c => c.sk === tagged[1]); if (hit) return [hit]; }
+  const up = Q.toUpperCase().replace(/\.(NS|BO)$/, ""), k = norm(Q), words = k.split(" ").filter(Boolean);
+  const scored = [];
+  for (const c of IDX) {
+    let sc = 0;
+    if (c.sk === up) sc = 100; else if (c.k === k) sc = 95;
+    else if (k && c.k.startsWith(k)) sc = 80 - Math.min(20, c.k.length - k.length) / 2;
+    else if (k && c.k.includes(k)) sc = 60;
+    else if (words.length) { const hit = words.filter(w => c.k.split(" ").includes(w)).length; if (hit) sc = 40 * hit / words.length + (c.k.startsWith(words[0]) ? 10 : 0); }
+    if (sc > 25) scored.push([sc, c]);
+  }
+  return scored.sort((a,b) => b[0] - a[0]).slice(0, 6).map(x => x[1]);
+}
+const coName = s => (S.companies.find(c => c[0] === s) || [s, s])[1];
+
+// ---------------- views
+const view = document.getElementById("view");
+function route(){
+  if (AUTH.on && !AUTH.user) return renderLogin();
+  const h = location.hash.slice(1) || "home";
+  document.querySelectorAll(".navl a").forEach(a => { if (h === a.dataset.r) a.setAttribute("aria-current","page"); else a.removeAttribute("aria-current"); });
+  statusLine();
+  document.title = h.startsWith("c-") ? h.slice(2).toUpperCase() + " · Big Money Tracker" : "Big Money Tracker";
+  if (h === "home") return renderHome();
+  if (h === "market") return renderMarket();
+  if (h === "follow") return renderFollow();
+  if (h.startsWith("c-")) { const it = (S.portfolio?.items || []).find(i => slug(i.s) === h.slice(2)); if (it) return renderCompany(it.s); }
+  if (!S.portfolio?.items?.length) return renderHome();
+  renderPortfolio();
+}
+addEventListener("hashchange", () => { route(); scrollTo(0, 0); });
+
+function renderHome(){
+  const has = S.portfolio?.items?.length;
+  const pre = has ? S.portfolio.items.map(i => `${coName(i.s)} (${i.s})`).join("\n") : "";
+  view.innerHTML = `<section class="start">
+    <div><h2>${has ? "Edit your portfolio" : "See who is buying the companies you own"}</h2>
+      <p class="intro">Add your portfolio or watchlist using company names. We match each one to its NSE listing, then show which FIIs, mutual funds, insurers and HNIs are dealing in it and holding it.</p>
+      <div class="how"><div><b>1</b><span>Paste or upload your company names. Symbols work too.</span></div>
+        <div><b>2</b><span>Check the matches and create your portfolio.</span></div>
+        <div><b>3</b><span>Click any company to see its big deals, largest shareholders and what changed this quarter.</span></div></div></div>
+    <div class="panel" id="panel"><label for="names">Company names, one per line</label>
+      <textarea id="names" placeholder="Tata Consultancy Services&#10;HDFC Bank&#10;Data Patterns&#10;Reliance Industries">${esc(pre)}</textarea>
+      <label class="file">Or upload an Excel or CSV file<input type="file" id="file" accept=".xlsx,.xls,.csv"></label>
+      <div class="actions"><button class="btn" id="find">Find these companies</button>${has ? `<a class="btn ghost" href="#portfolio">Cancel</a>` : ""}</div>
+      <p class="msg" id="hmsg"></p></div></section>`;
+  document.getElementById("find").onclick = () => review(document.getElementById("names").value.split(/[\n;]+/));
+  document.getElementById("file").onchange = async e => { const f = e.target.files[0]; if (!f) return;
+    try { const names = await readNames(f); document.getElementById("names").value = names.join("\n"); review(names); }
+    catch(err) { const m = document.getElementById("hmsg"); m.textContent = `Couldn't read ${f.name}: ${err.message}`; m.className = "msg err"; } };
+}
+let XL = null;
+const loadXL = () => XL ||= new Promise((res, rej) => { const s = document.createElement("script"); s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"; s.onload = () => res(window.XLSX); s.onerror = () => rej(new Error("the Excel reader didn't load")); document.head.appendChild(s); });
+async function readNames(f){
+  let rows;
+  if (/\.csv$/i.test(f.name)) rows = (await f.text()).split(/\r?\n/).map(l => l.split(",").map(x => x.replace(/^"|"$/g, "").trim()));
+  else { const X = await loadXL(); const wb = X.read(await f.arrayBuffer()); rows = X.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1}).map(r => r.map(x => String(x ?? "").trim())); }
+  const head = (rows[0] || []).map(h => h.toLowerCase()); let c = head.findIndex(h => /company|name|stock|scrip|symbol|ticker|instrument/.test(h));
+  const start = c >= 0 ? 1 : 0; if (c < 0) c = 0;
+  return rows.slice(start).map(r => r[c]).filter(x => x && !/^(total|cash)$/i.test(x));
+}
+function review(raw){
+  const names = [...new Set(raw.map(x => x.trim()).filter(Boolean))].slice(0, 100);
+  if (!names.length) { const m = document.getElementById("hmsg"); m.textContent = "Add at least one company name."; m.className = "msg err"; return; }
+  S.draft = names.map(q => { const c = matchName(q); return {q, cands:c, pick:c[0]?.s || ""}; });
+  const panel = document.getElementById("panel"), miss = S.draft.filter(d => !d.pick).length;
+  panel.innerHTML = `<label>Check the matches</label><p class="note">${S.draft.length - miss} of ${S.draft.length} found${miss ? `. For the rest, pick a company or type its NSE symbol.` : "."}</p>
+    <div>${S.draft.map((d, i) => `<div class="match ${d.pick ? "" : "miss"}"><div class="q">${esc(d.q)}</div><div>
+      <select data-i="${i}" aria-label="Match for ${esc(d.q)}">${d.cands.map(c => `<option value="${esc(c.s)}">${esc(c.n)} (${esc(c.s)})</option>`).join("")}<option value="">Not this, skip it</option><option value="__type">Type the NSE symbol…</option></select>
+      <input type="text" data-t="${i}" placeholder="NSE symbol, e.g. TCS" hidden></div></div>`).join("")}</div>
+    <div class="actions"><button class="btn" id="create">Save portfolio</button><button class="btn ghost" id="again">Change names</button></div><p class="msg" id="hmsg"></p>`;
+  panel.querySelectorAll("select").forEach(sel => { const d = S.draft[+sel.dataset.i]; if (!d.cands.length) sel.value = "__type";
+    const sync = () => { const t = panel.querySelector(`[data-t="${sel.dataset.i}"]`); t.hidden = sel.value !== "__type"; d.pick = sel.value === "__type" ? t.value.trim().toUpperCase() : sel.value; };
+    sel.onchange = sync; panel.querySelector(`[data-t="${sel.dataset.i}"]`).oninput = sync; sync(); });
+  document.getElementById("again").onclick = renderHome;
+  document.getElementById("create").onclick = savePortfolio;
+}
+async function savePortfolio(){
+  const items = [...new Map(S.draft.filter(d => d.pick).map(d => [d.pick, {s:d.pick, q:d.q}])).values()];
+  const m = document.getElementById("hmsg");
+  if (!items.length) { m.textContent = "Pick at least one company."; m.className = "msg err"; return; }
+  const p = {items, follows: follows(), updated:new Date().toISOString()};
+  try { await setDoc("portfolio/main", p); await saveAccountPortfolio(p); } catch(e) { m.textContent = "Couldn't save to your account: " + e.message + ". Saved in this browser instead."; m.className = "msg err"; }
+  try { localStorage.setItem(LS, JSON.stringify(p)); } catch(e) {}
+  S.portfolio = p; location.hash = "portfolio";
+}
+
+function renderPortfolio(){
+  const items = S.portfolio.items, syms = items.map(i => i.s);
+  view.innerHTML = `<p class="loading">Loading your companies…</p>`;
+  Promise.all([loadHolders(syms), loadTxns(syms), loadCorp(syms)]).then(() => {
+    const tx = transactions(syms);
+    let h = `<div class="cohead"><h2>Your companies</h2><a class="btn ghost" href="#home">Add or remove companies</a></div>
+      <p class="note">Click a company to see who bought and sold it this month and its major shareholders.</p><div class="grid">`;
+    h += items.map(({s}) => {
+      const t = tx.filter(x => x.s === s), last = t[0], q = S.holders.get(s)?.q?.[0];
+      const o = official(q);
+      const pc = k => o ? o[k].toFixed(2) + "%" : "–";
+      const pr = S.prices[s], sg = signals(s).slice(0, 2);
+      return `<a class="co" href="#c-${slug(s)}"><div class="sym">${esc(s)}</div><div class="full">${esc(coName(s))}</div>
+        ${pr && +pr.price ? `<div class="ln"><span>Share price</span><b>Rs ${(+pr.price).toLocaleString("en-IN",{maximumFractionDigits:2})} <span class="${+pr.pct > 0 ? "pos" : +pr.pct < 0 ? "neg" : ""}">${+pr.pct > 0 ? "+" : ""}${(+pr.pct || 0).toFixed(2)}%</span></b></div>` : ""}
+        <div class="ln"><span>Latest transaction</span><b>${last ? `${fmtD(last.d, true)}` : !S.holders.get(s)?.q?.length && !S.txns.get(s) ? "Loading from NSE…" : "None in a year"}</b></div>
+        ${last ? `<div class="ln"><span>${esc(short(last.who, 24))}</span><b class="${last.side === "BUY" ? "pos" : last.side === "SELL" ? "neg" : ""}">${esc(last.act)}</b></div>` : ""}
+        <div class="badges"><span class="chip c-pro">Promoters ${pc("Promoters")}</span><span class="chip c-fii">FII ${pc("FIIs")}</span><span class="chip c-dii">DII ${pc("DIIs")}</span></div>${sg.length ? `<div class="sigs sm-sigs">${sigChips(sg)}</div>` : ""}</a>`; }).join("");
+    view.innerHTML = h + `</div>`;
+    const miss = syms.find(s => !S.holders.get(s)?.q?.length && !S.txns.get(s));
+    if (miss) waitFor(miss, () => { if (location.hash === "#portfolio") renderPortfolio(); });
+  });
+}
+
+function official(q){
+  const T = q?.totals; if (!T) return null;
+  const g = k => +(T[k] || 0);
+  const fpi = Object.entries(T).filter(([k]) => k.startsWith("InstitutionsForeignPortfolio")).reduce((a, [, v]) => a + +v, 0);
+  return {
+    "Promoters": g("ShareholdingOfPromoterAndPromoterGroup") || +q.promoter || 0,
+    "FIIs": fpi || g("InstitutionsForeign"),
+    "DIIs": g("InstitutionsDomestic"),
+    "  Mutual funds": g("MutualFundsOrUTI"), "  Insurance companies": g("InsuranceCompanies"), "  Alternative investment funds": g("AlternativeInvestmentFunds"),
+    "  Banks, pension and other": Math.max(0, g("InstitutionsDomestic") - g("MutualFundsOrUTI") - g("InsuranceCompanies") - g("AlternativeInvestmentFunds")),
+    "Public": g("NonInstitutions"),
+    "  Retail (up to Rs 2 lakh)": g("ResidentIndividualShareholdersHoldingNominalShareCapitalUpToRsTwoLakh"),
+    "  HNI individuals (over Rs 2 lakh)": g("ResidentIndividualShareholdersHoldingNominalShareCapitalInExcessOfRsTwoLakh"),
+    "  Companies": g("BodiesCorporate"), "  NRIs": g("NonResidentIndians"),
+    "No. of shareholders": q.shareholders || null,
+  };
+}
+function holdingTable(qs){
+  const cols = qs.filter(q => q?.totals).slice(0, 5).reverse();   // oldest to newest
+  if (!cols.length) return "";
+  const offs = cols.map(official), last = offs.length - 1;
+  const keys = Object.keys(offs[last]).filter(k => offs.some(o => o[k]));
+  const fmt = (k, v) => v == null ? "–" : k.startsWith("No.") ? Math.round(v).toLocaleString("en-IN") : v.toFixed(2) + "%";
+  return `<div class="tbl"><table class="shp"><thead><tr><th></th>${cols.map((q, i) => `<th class="num${i < last - 1 ? " old" : ""}">${fmtQ(q.period)}</th>`).join("")}${last ? `<th class="num">Change</th>` : ""}</tr></thead><tbody>` +
+    keys.map(k => { const sub = k.startsWith("  "), d = last ? offs[last][k] - offs[last - 1][k] : null;
+      return `<tr class="${sub ? "sub" : "top"}"><td>${esc(k.trim())}</td>${offs.map((o, i) => `<td class="num${i < last - 1 ? " old" : ""}">${i === last ? `<b>${fmt(k, o[k])}</b>` : fmt(k, o[k])}</td>`).join("")}
+        ${last ? `<td class="num ${d > 0.004 ? "pos" : d < -0.004 ? "neg" : ""}">${d == null || Math.abs(d) < 0.005 ? "–" : (d > 0 ? "+" : "") + (k.startsWith("No.") ? Math.round(d).toLocaleString("en-IN") : d.toFixed(2))}</td>` : ""}</tr>`; }).join("") + `</tbody></table></div>`;
+}
+function trend(qs){
+  const cols = qs.filter(q => q?.totals).slice(0, 5).reverse(); if (cols.length < 2) return "";
+  const offs = cols.map(official);
+  const series = [["Promoters", "var(--ink)"], ["FIIs", "#3C4BD0"], ["DIIs", "#9A3C88"], ["Public", "#8D93B3"]];
+  return `<div class="trend">` + series.map(([k, c]) => {
+    const v = offs.map(o => o[k] || 0), lo = Math.min(...v), hi = Math.max(...v), span = hi - lo || 1;
+    const pts = v.map((x, i) => `${(i * 100 / (v.length - 1)).toFixed(1)},${(36 - (x - lo) / span * 30 - 3).toFixed(1)}`).join(" ");
+    const d = v[v.length - 1] - v[0];
+    return `<div class="tr"><div class="tl">${k}</div><svg viewBox="0 0 100 36" preserveAspectRatio="none" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="${c}" stroke-width="2.2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg>
+      <div class="tv"><b>${v[v.length - 1].toFixed(2)}%</b><span class="${d > 0.004 ? "pos" : d < -0.004 ? "neg" : "sm"}">${Math.abs(d) < 0.005 ? "flat" : (d > 0 ? "+" : "") + d.toFixed(2)} since ${fmtQ(cols[0].period)}</span></div></div>`; }).join("") + `</div>`;
+}
+const livePrice = s => { const p = S.prices[s]; return p && +p.price ? +p.price : null; };
+function priceStrip(s){
+  const p = S.prices[s]; if (!p || !+p.price) return "";
+  const pct = +p.pct, hi = +p.high52, lo = +p.low52, pos = hi > lo ? (p.price - lo) / (hi - lo) * 100 : null;
+  return `<div class="price-strip"><div><span class="sm">Share price</span><b>Rs ${(+p.price).toLocaleString("en-IN",{maximumFractionDigits:2})}</b>
+    <span class="${pct > 0 ? "pos" : pct < 0 ? "neg" : ""}">${pct > 0 ? "+" : ""}${(+pct || 0).toFixed(2)}% on the day</span></div>
+    ${pos != null ? `<div class="range"><span class="sm">52-week range</span><div class="rbar"><i style="left:${Math.min(100, Math.max(0, pos)).toFixed(1)}%"></i></div>
+      <div class="rlab"><span>Rs ${lo.toLocaleString("en-IN")}</span><span>Rs ${hi.toLocaleString("en-IN")}</span></div></div>` : ""}
+    <span class="sm">As of ${esc(p.time || "")}</span></div>`;
+}
+function signals(s){
+  const out = [], qs = (S.holders.get(s)?.q || []).filter(q => q.totals), offs = qs.map(official);   // newest first
+  const streak = k => { let n = 0, dir = 0; for (let i = 0; i + 1 < offs.length; i++) { const d = offs[i][k] - offs[i + 1][k]; const sg = d > 0.004 ? 1 : d < -0.004 ? -1 : 0; if (!sg || (dir && sg !== dir)) break; dir = sg; n++; } return [n, dir]; };
+  for (const [k, name] of [["FIIs", "FIIs"], ["DIIs", "DIIs"], ["  Mutual funds", "Mutual funds"]]) {
+    const [n, dir] = streak(k); if (n >= 2) out.push([dir > 0 ? "up" : "down", `${name} ${dir > 0 ? "raised" : "cut"} stake ${n} quarters in a row`]);
+    else if (n === 1 && Math.abs(offs[0][k] - offs[1][k]) >= 0.5) out.push([dir > 0 ? "up" : "down", `${name} ${dir > 0 ? "up" : "down"} ${Math.abs(offs[0][k] - offs[1][k]).toFixed(2)} points last quarter`]);
+  }
+  if (offs.length > 1) { const d = offs[0].Promoters - offs[1].Promoters; if (Math.abs(d) >= 0.1) out.push([d > 0 ? "up" : "down", `Promoters ${d > 0 ? "raised" : "cut"} stake by ${Math.abs(d).toFixed(2)} points`]); }
+  const tx = transactions([s]), since90 = today().getTime() - 90 * DAY;
+  const ins = tx.filter(x => +x.d >= since90 && (x.cat === "Promoter" || x.cat === "Insider"));
+  const b = ins.filter(x => x.side === "BUY").length, sl = ins.filter(x => x.side === "SELL").length;
+  if (b) out.push(["up", `Promoter or director bought in the last 90 days (${b})`]);
+  if (sl) out.push(["down", `Promoter or director sold in the last 90 days (${sl})`]);
+  const pl = ins.filter(x => /pledge/i.test(x.act) && !/revoke|release/i.test(x.act)).length; if (pl) out.push(["down", `Promoter pledged shares in the last 90 days`]);
+  const pi = pledgeInfo(s); if (pi && pi.ofPromoter >= 1) out.push([pi.ofPromoter >= 20 ? "down" : "note", `Promoters have pledged ${pi.ofPromoter.toFixed(2)}% of their shares`]);
+  const qa = (S.corp.get(s)?.allot || []).find(r => /QIP|Preferential|Warrants/.test(ALLOT_TYPE(r.subject + " " + r.text)) && +pd(r.date) >= today().getTime() - 365 * DAY);
+  if (qa) out.push(["note", `${ALLOT_TYPE(qa.subject + " " + qa.text)} in ${fmtQ(qa.date)}: new shares issued to investors`]);
+  const big = tx.filter(x => +x.d >= today().getTime() - 30 * DAY && /deal/i.test(x.src)); if (big.length) out.push(["note", `${big.length} bulk or block deal${big.length > 1 ? "s" : ""} in the last 30 days`]);
+  const stars = [...new Set((qs[0]?.rows || []).filter(([n, p, g]) => categorize(n, g) === "Superstar").map(r => short(r[0], 30)))];
+  if (stars.length) out.push(["star", `Superstar investor holds: ${stars.join(", ")}`]);
+  if (offs.length > 1 && offs[0]["No. of shareholders"] && offs[1]["No. of shareholders"]) { const r = offs[0]["No. of shareholders"] / offs[1]["No. of shareholders"] - 1; if (Math.abs(r) >= 0.03) out.push([r < 0 ? "up" : "down", `Shareholder count ${r < 0 ? "fell" : "rose"} ${Math.abs(r * 100).toFixed(1)}% last quarter${r < 0 ? " (fewer small holders)" : ""}`]); }
+  const p = S.prices[s]; if (p && +p.high52 && +p.price >= 0.95 * p.high52) out.push(["note", "Trading near its 52-week high"]); else if (p && +p.low52 && +p.price <= 1.05 * p.low52) out.push(["note", "Trading near its 52-week low"]);
+  return out;
+}
+function pledgeInfo(s){
+  const p = S.corp.get(s)?.pledge?.[0]; if (!p) return null;
+  const n = k => parseFloat(String(p[k] ?? "").replace(/,/g, ""));
+  return {period: p.shp, promoterPct: n("percPromoterHolding"), pledgedShares: n("totPromoterShares"), ofPromoter: n("percPromoterShares"), ofCompany: n("percTotShares"), promoterShares: n("totPromoterHolding")};
+}
+const ALLOT_TYPE = t => /qualified institution|\bqip\b/i.test(t) ? "QIP" : /preferential/i.test(t) ? "Preferential issue" : /warrant/i.test(t) ? "Warrants" : /rights/i.test(t) ? "Rights issue" : /esop|esos|employee stock/i.test(t) ? "Employee stock options" : /private placement/i.test(t) ? "Private placement" : "Allotment";
+function allotRows(s){
+  const a = S.corp.get(s)?.allot || []; if (!a.length) return "";
+  return `<div class="card">` + a.map(r => { const type = ALLOT_TYPE(r.subject + " " + r.text), big = /QIP|Preferential|Warrants|Rights|Private/.test(type);
+    const txt = String(r.text).replace(/&#8377;/g, "Rs ").replace(/\s+/g, " ").trim();
+    return `<div class="row r-chg"><div><div class="nm">${esc(type)}${big ? ' <span class="crown" title="Shares issued to investors"></span>' : ""}</div><div class="sm">${esc(txt)}</div></div>
+      <div class="val"><div class="dt">${r.date ? fmtD(pd(r.date), true) : ""}</div>${/^https:\/\//.test(r.file) ? `<a class="sm" href="${esc(r.file)}" target="_blank" rel="noopener">Read the filing</a>` : ""}</div></div>`; }).join("") + `</div>`;
+}
+const sigChips = list => list.map(([k, txt]) => `<span class="sig sig-${k}">${esc(txt)}</span>`).join("");
+function holderRows(list){
+  const sc = Math.max(1, ...list.map(x => x.p));
+  return `<div class="card">` + list.map((x, i) => `<div class="row r-hold"><div><div class="nm">${esc(short(x.n, 46))}${i === 0 ? '<span class="crown" title="Largest"></span>' : ""}</div>${chip(x.cat)}</div>
+    <div class="pct"><div class="t"><div class="f" style="width:${(100*x.p/sc).toFixed(1)}%"></div></div><div class="n">${x.p.toFixed(2)}%</div></div></div>`).join("") + `</div>`;
+}
+function dealRows(list){
+  return `<div class="card">` + list.map(x => `<div class="row r-deal"><div class="dt">${fmtD(x.d, true)}</div>
+    <div class="wh"><div class="nm">${esc(short(x.c))}</div>${chip(x.cat)}</div>
+    <div class="side ${x.side === "BUY" ? "pos" : "neg"}">${x.side === "BUY" ? "Bought" : "Sold"}</div>
+    <div class="price"><b>Rs ${x.p.toLocaleString("en-IN",{maximumFractionDigits:2})}</b><div class="sm">price per share</div></div>
+    <div class="val ${x.side === "BUY" ? "pos" : "neg"}">${cr(x.v)}<div class="sm">${x.q.toLocaleString("en-IN")} shares</div></div></div>`).join("") + `</div>`;
+}
+
+function majorHolders(s, n){
+  const hd = S.holders.get(s), [q0, q1] = hd?.q || [];
+  if (!q0) return `<div class="empty"><strong>Getting shareholders from NSE now</strong>This usually takes a minute or two. The page updates by itself.</div>`;
+  const prev = new Map((q1?.rows || []).map(([nm, p]) => [norm(nm), +p]));
+  const rows = (q0.rows || []).map(([nm, p, g]) => ({n:nm, p:+p, cat:categorize(nm, g), was:prev.get(norm(nm))})).sort((a, b) => b.p - a.p);
+  const list = rows.slice(0, n);
+  return `<p class="note">From the ${esc(fmtQ(q0.period))} shareholding filing on NSE${q0.filed ? `, filed ${esc(String(q0.filed).split(" ")[0])}` : ""}. Companies must name every holder with 1% or more, so smaller holders are not listed.${q1 ? ` Change is against ${esc(fmtQ(q1.period))}.` : ""}</p>
+  <div class="tbl"><table class="bbg"><thead><tr><th class="num">#</th><th>Holder name</th><th>Type</th><th class="num">% held</th><th class="num">Change</th></tr></thead><tbody>` +
+  list.map((x, i) => { const d = x.was == null ? null : x.p - x.was;
+    return `<tr><td class="num sm">${i + 1}</td><td><b>${esc(short(x.n, 60))}</b></td><td>${chip(x.cat)}</td><td class="num"><b>${x.p.toFixed(2)}%</b></td>
+      <td class="num ${x.was == null ? "pos" : d > 0.004 ? "pos" : d < -0.004 ? "neg" : "sm"}">${x.was == null ? (q1 ? "New" : "–") : Math.abs(d) < 0.005 ? "–" : (d > 0 ? "+" : "") + d.toFixed(2)}</td></tr>`; }).join("") +
+  `</tbody></table></div>` + (rows.length > n ? `<button class="btn ghost" id="more20">Show top ${Math.min(20, rows.length)}</button>` : "") + `<p class="note">${rows.length} named holder${rows.length === 1 ? "" : "s"} in this filing.</p>`;
+}
+function renderCompany(s){
+  view.innerHTML = `<p class="loading">Loading ${esc(s)}…</p>`;
+  Promise.all([loadHolders([s]), loadTxns([s]), loadCorp([s])]).then(() => {
+    const f = S.filter, keep = c => f === "all" || groupOf(c) === f;
+    const now = today(), m0 = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    const txAll = transactions([s]).filter(x => x.side !== "OTHER"), tx = txAll.filter(x => keep(x.cat));
+    const month = tx.filter(x => +x.d >= m0);
+    const pending = !S.holders.get(s)?.q?.length && !S.txns.get(s);
+    if (pending) waitFor(s, () => { if (location.hash === "#c-" + slug(s)) renderCompany(s); });
+    let h = `<a class="back" href="#portfolio">← Your companies</a>
+      <div class="cohead"><div><div class="sym">${esc(s)}</div><div class="full">${esc(coName(s))}</div></div>
+      <a class="btn ghost" href="https://www.nseindia.com/get-quotes/equity?symbol=${encodeURIComponent(s)}" target="_blank" rel="noopener">Open on NSE</a></div>`;
+    h += priceStrip(s);
+    h += `<h3>Bought and sold this month</h3>`;
+    h += `<div class="filters" role="group" aria-label="Show investors">${GROUPS.map(([k, l]) => `<button data-f="${k}" aria-pressed="${k === f}">${l}</button>`).join("")}</div>`;
+    if (month.length) h += txnRows(month, false);
+    else if (tx.length) h += `<p class="note">No buying or selling disclosed since 1 ${now.toLocaleString("en-IN",{month:"long"})}. The latest ones before that:</p>` + txnRows(tx.slice(0, 5), false);
+    else h += pending ? (PAGES ? `<div class="empty"><strong>${esc(s)} isn't collected yet</strong>The background collection reaches every NSE company, most traded first. To get it right now, tap below and then Submit on GitHub; it arrives in about 2 minutes.<div class="actions"><a class="btn" href="${esc(fetchNowUrl(s))}" target="_blank" rel="noopener">Get it now</a></div></div>`
+        : `<div class="empty"><strong>Getting ${esc(s)} from NSE now</strong>Deals, insider trades and shareholders usually arrive in a minute or two. The page updates by itself.</div>`)
+      : `<p class="note">No disclosed buying or selling in the last year${f === "all" ? "" : " by this group"}.</p>`;
+    h += `<p class="note">Covers NSE and BSE bulk and block deals, promoter and director trades, and large-stake (5%+) filings.</p>`;
+    const open = S.openHolders === s;
+    h += `<div class="actions"><button class="btn" id="vh" aria-expanded="${open}">${open ? "Hide major shareholders" : "View major shareholders"}</button></div><div id="mh">${open ? majorHolders(s, S.holderN || 10) : ""}</div>`;
+    view.innerHTML = h;
+    view.querySelectorAll("[data-f]").forEach(b => b.onclick = () => { S.filter = b.dataset.f; renderCompany(s); });
+    const wire = () => { const m = document.getElementById("more20"); if (m) m.onclick = () => { S.holderN = 20; document.getElementById("mh").innerHTML = majorHolders(s, 20); wire(); }; };
+    document.getElementById("vh").onclick = () => { S.openHolders = open ? null : s; S.holderN = 10; renderCompany(s); };
+    wire();
+  });
+}
+
+const FOLLOW_SUGGEST = ["Ashish Kacholia", "Vijay Kishanlal Kedia", "Mukul Mahavir Agrawal", "Dolly Khanna", "Radhakishan Damani", "Sunil Singhania", "Madhusudan Kela", "Bandhan Mutual Fund", "HDFC Mutual Fund", "SBI Mutual Fund", "Nippon India", "Goldman Sachs", "Morgan Stanley", "Government of Singapore"];
+const fkey = s => String(s).toUpperCase().replace(/[^A-Z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+const follows = () => S.portfolio?.follows || [];
+async function saveFollows(list){
+  const p = Object.assign({items: []}, S.portfolio || {}, {follows: list, updated: new Date().toISOString()});
+  try { await setDoc("portfolio/main", p); await saveAccountPortfolio(p); } catch(e) {}
+  try { localStorage.setItem(LS, JSON.stringify(p)); } catch(e) {}
+  S.portfolio = p;
+}
+function followMatches(name){
+  // match on the distinctive words of the name: "Bandhan Mutual Fund" follows every Bandhan scheme ("Bandhan Small Cap Fund")
+  const GENERIC = new Set("MUTUAL FUND FUNDS LIMITED LTD PVT PRIVATE THE AMC ASSET MANAGEMENT COMPANY CO OF AND INDIA".split(" "));
+  const core = fkey(name).split(" ").filter(w => w && !GENERIC.has(w)), isMF = /MUTUAL FUND/.test(fkey(name));
+  const hit = (n, cat) => { const w = fkey(n).split(" "); return core.length && core.every(c => w.includes(c)) && (!isMF || !cat || cat === "DII - Mutual Fund"); };
+  const syms = (S.portfolio?.items || []).map(i => i.s);
+  const deals = allDeals().filter(x => hit(x.c, x.cat)).map(x => ({d:x.d, s:x.s, who:x.c, cat:x.cat, src:x.ty + " deal", side:x.side, act:x.side === "BUY" ? "Bought" : "Sold", qty:x.q, price:x.p, value:x.v, after:null}));
+  const tx = transactions(syms).filter(x => /Insider|Large/.test(x.src) && hit(x.who, x.cat));
+  const holds = [];
+  for (const s of syms) { const q = S.holders.get(s)?.q || []; const now = (q[0]?.rows || []).find(r => hit(r[0], categorize(r[0], r[2]))); const was = (q[1]?.rows || []).find(r => hit(r[0], categorize(r[0], r[2])));
+    if (now || was) holds.push({s, n:(now || was)[0], now: now ? +now[1] : null, was: was ? +was[1] : null, period:q[0]?.period}); }
+  return {all:[...deals, ...tx].sort((a, b) => b.d - a.d), holds};
+}
+function renderFollow(){
+  const syms = (S.portfolio?.items || []).map(i => i.s);
+  view.innerHTML = `<p class="loading">Loading…</p>`;
+  Promise.all([loadHolders(syms), loadTxns(syms)]).then(() => {
+    const list = follows();
+    let h = `<h2>Investors you follow</h2><p class="note">Every bulk and block deal by these investors across the whole market, plus their insider and large-stake filings and 1%+ holdings in your companies.</p>
+      <form id="fform" class="fadd"><input type="text" id="fname" placeholder="Investor name, e.g. Ashish Kacholia" aria-label="Investor name"><button class="btn" type="submit">Follow</button></form>
+      <div class="sugg">${FOLLOW_SUGGEST.filter(n => !list.some(f => fkey(f) === fkey(n))).map(n => `<button class="chipbtn" data-add="${esc(n)}">+ ${esc(n)}</button>`).join("")}</div>`;
+    if (!list.length) h += `<div class="empty" style="margin-top:1.5rem"><strong>Follow your first investor</strong>Type a name, or tap one of the suggestions. Part of a name works too, like "Kacholia" or "Bandhan".</div>`;
+    for (const name of list) {
+      const m = followMatches(name);
+      h += `<div class="fsec"><div class="cohead"><h3>${esc(name)}</h3><button class="btn ghost" data-del="${esc(name)}">Unfollow</button></div>`;
+      if (m.holds.length) h += `<p class="note"><b>In your companies:</b> ${m.holds.map(x => `<a href="#c-${slug(x.s)}">${esc(x.s)}</a> ${x.now != null ? x.now.toFixed(2) + "%" : "below 1% now"}${x.was != null && x.now != null && Math.abs(x.now - x.was) >= 0.01 ? ` (${x.now > x.was ? "+" : ""}${(x.now - x.was).toFixed(2)} last quarter)` : ""}`).join(", ")}</p>`;
+      h += m.all.length ? txnRows(m.all.slice(0, 20)) : `<p class="note">No deals or filings by this name since collection started${S.days.size ? ` (${S.days.size} trading day${S.days.size === 1 ? "" : "s"} of market-wide deals)` : ""}.</p>`;
+      h += `</div>`;
+    }
+    view.innerHTML = h;
+    const add = async n => { n = n.trim(); if (!n || follows().some(f => fkey(f) === fkey(n))) return; await saveFollows([...follows(), n]); renderFollow(); };
+    document.getElementById("fform").onsubmit = e => { e.preventDefault(); add(document.getElementById("fname").value); };
+    view.querySelectorAll("[data-add]").forEach(b => b.onclick = () => add(b.dataset.add));
+    view.querySelectorAll("[data-del]").forEach(b => b.onclick = async () => { await saveFollows(follows().filter(f => f !== b.dataset.del)); renderFollow(); });
+  });
+}
+
+function renderMarket(target = view, compact = false){
+  const deals = allDeals(); const last = deals.reduce((m, x) => Math.max(m, +x.d), 0);
+  if (!last) { target.innerHTML = `<div class="empty"><strong>No market data yet</strong>The first nightly collection fills this page with every bulk and block deal on NSE.</div>`; return; }
+  const day = deals.filter(x => +x.d === last), mine = new Set((S.portfolio?.items || []).map(i => i.s));
+  const by = [...groupBy(day, x => x.c)].map(([c, a]) => { const st = [...new Set(a.map(x => x.s))]; const qty = sum(a, x => x.q);
+    return {c, cat:a[0].cat, n:sum(a, signed), st: st.length === 1 ? `${st[0]} at Rs ${(sum(a, x => x.q * x.p) / qty).toLocaleString("en-IN",{maximumFractionDigits:2})} a share` : st.join(", ")}; });
+  const board = (a, pos) => `<div class="card">` + a.map((x, i) => `<div class="row r-lead"><div class="sm" style="font-weight:650">${i+1}</div><div><div class="nm">${esc(short(x.c))}</div>${chip(x.cat)}<div class="sm">${esc(x.st)}</div></div><div class="val ${pos ? "pos" : "neg"}">${cr(x.n, true)}</div></div>`).join("") + `</div>`;
+  let h = `<h2>${compact ? "Latest big deals on NSE" : "Big deals on NSE"}, ${fmtD(new Date(last), true)}</h2><p class="note">${day.length} bulk and block deals after removing trading firms.${[...new Set(day.map(x => x.s))].some(s => mine.has(s)) ? " Some are in your companies." : ""}</p>`;
+  h += `<div class="cols"><div><h3>Biggest buyers</h3>${board(by.filter(x => x.n > 0).sort((a,b) => b.n - a.n).slice(0, 12), true)}</div><div><h3>Biggest sellers</h3>${board(by.filter(x => x.n < 0).sort((a,b) => a.n - b.n).slice(0, 12), false)}</div></div>`;
+  const hni = day.filter(x => x.cat.startsWith("HNI")).sort((a,b) => b.v - a.v).slice(0, 12);
+  if (hni.length && !compact) h += `<h3>HNIs and individuals</h3><div class="card">${hni.map(x => `<div class="row r-deal"><div class="dt"><b class="sym">${esc(x.s)}</b></div><div class="wh"><div class="nm">${esc(short(x.c))}</div><div class="sm">${esc(x.co)}</div></div><div class="side ${x.side === "BUY" ? "pos" : "neg"}">${x.side === "BUY" ? "Bought" : "Sold"}</div><div class="price"><b>Rs ${x.p.toLocaleString("en-IN",{maximumFractionDigits:2})}</b><div class="sm">price per share</div></div><div class="val ${x.side === "BUY" ? "pos" : "neg"}">${cr(x.v)}<div class="sm">${x.q.toLocaleString("en-IN")} shares</div></div></div>`).join("")}</div>`;
+  const list = [...day].sort((a,b) => b.v - a.v).slice(0, compact ? 15 : 500);
+  h += `<h3>Every deal and its price</h3><p class="note">The price is the average price per share the deal was done at, as reported by NSE.${compact ? " Showing the 15 largest." : ""}</p>
+    <div class="tbl"><table class="stack"><thead><tr><th>Stock</th><th>Investor</th><th>Side</th><th class="num">Price per share</th><th class="num">Shares</th><th class="num">Value</th><th>Type</th></tr></thead><tbody>` +
+    list.map(x => `<tr><td data-l="Stock">${mine.has(x.s) ? `<a href="#c-${slug(x.s)}"><b>${esc(x.s)}</b></a> <span class="chip c-fii">Yours</span>` : `<b>${esc(x.s)}</b>`}<div class="sm">${esc(x.co)}</div></td><td data-l="Investor">${esc(short(x.c))}<br>${chip(x.cat)}</td>
+      <td data-l="Side" class="${x.side === "BUY" ? "pos" : "neg"}">${x.side === "BUY" ? "Bought" : "Sold"}</td><td data-l="Price" class="num pr">Rs ${x.p.toLocaleString("en-IN",{maximumFractionDigits:2})}</td>
+      <td data-l="Shares" class="num">${x.q.toLocaleString("en-IN")}</td><td data-l="Value" class="num">${cr(x.v)}</td><td data-l="Type">${x.ty}</td></tr>`).join("") + `</tbody></table></div>`;
+  if (compact) h += `<p style="margin-top:1.2rem"><a class="btn ghost" href="#market">See all of the latest deals</a></p>`;
+  target.innerHTML = h;
+}
+
+boot().catch(e => { view.innerHTML = `<div class="empty"><strong>Something went wrong loading the page</strong>${esc(e.message)}</div>`; });
+}
+</script>
+</body>
+</html>
